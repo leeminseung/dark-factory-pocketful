@@ -25,10 +25,38 @@ export class State {
     this.settlements = new Map(); // id -> settlement
     this.idempotency = new Map(); // scope -> { fingerprint, response }
     this.lastTimestampMs = 0;
+    this.journal = null; // undo steps of the running transaction, newest last
+  }
+
+  /**
+   * Runs `operation` so that it changes everything or nothing: if it throws anything,
+   * an ApiError or an unexpected error, every change it made to this State is undone.
+   * A failed write therefore never leaves money moved or a key recorded.
+   */
+  transaction(operation) {
+    const outer = this.journal;
+    this.journal = [];
+    try {
+      const result = operation();
+      if (outer) outer.push(...this.journal);
+      return result;
+    } catch (err) {
+      for (const undo of this.journal.reverse()) undo();
+      throw err;
+    } finally {
+      this.journal = outer ?? null;
+    }
+  }
+
+  /** Records how to undo a change, when a transaction is running. */
+  remember(undo) {
+    if (this.journal) this.journal.push(undo);
   }
 
   /** A creation time that never runs backwards, so creation order and created_at agree. */
   nextTimestamp() {
+    const before = this.lastTimestampMs;
+    this.remember(() => { this.lastTimestampMs = before; });
     this.lastTimestampMs = Math.max(Date.now(), this.lastTimestampMs);
     return this.lastTimestampMs;
   }
@@ -47,6 +75,11 @@ export class State {
     this.users.set(user.id, user);
     this.userIdByEmail.set(user.email.toLowerCase(), user.id);
     this.userIdByHandle.set(user.handle, user.id);
+    this.remember(() => {
+      this.users.delete(user.id);
+      this.userIdByEmail.delete(user.email.toLowerCase());
+      this.userIdByHandle.delete(user.handle);
+    });
   }
 
   userByEmail(email) {
@@ -60,6 +93,7 @@ export class State {
   issueToken(userId) {
     const token = randomBytes(32).toString('base64url');
     this.tokens.set(token, userId);
+    this.remember(() => this.tokens.delete(token));
     return token;
   }
 
@@ -90,7 +124,12 @@ export class State {
       const after = this.users.get(userId).balance + delta;
       if (after < 0) throw insufficientFunds();
     }
-    for (const [userId, delta] of net) this.users.get(userId).balance += delta;
+    for (const [userId, delta] of net) {
+      const user = this.users.get(userId);
+      const before = user.balance;
+      this.remember(() => { user.balance = before; });
+      user.balance += delta;
+    }
     return transfers.map((t) => {
       const payment = {
         id: this.newId('p', (id) => this.paymentsById.has(id)),
@@ -115,6 +154,10 @@ export class State {
    */
   closeRequest(request, status, { visibility } = {}) {
     if (request.status !== 'pending') throw requestNotPending();
+    this.remember(() => {
+      request.status = 'pending';
+      request.paymentId = null;
+    });
     if (status !== 'paid') {
       request.status = status;
       return null;
@@ -134,19 +177,29 @@ export class State {
   addPayment(payment) {
     this.payments.push(payment);
     this.paymentsById.set(payment.id, payment);
+    this.remember(() => {
+      this.payments.pop();
+      this.paymentsById.delete(payment.id);
+    });
   }
 
   addRequest(request) {
     this.requests.push(request);
     this.requestsById.set(request.id, request);
+    this.remember(() => {
+      this.requests.pop();
+      this.requestsById.delete(request.id);
+    });
   }
 
   addSplit(split) {
     this.splits.set(split.id, split);
+    this.remember(() => this.splits.delete(split.id));
   }
 
   addSettlement(settlement) {
     this.settlements.set(settlement.id, settlement);
+    this.remember(() => this.settlements.delete(settlement.id));
   }
 
   // ---- idempotency records ---------------------------------------------
@@ -157,6 +210,7 @@ export class State {
 
   saveIdempotencyRecord(scope, record) {
     this.idempotency.set(scope, record);
+    this.remember(() => this.idempotency.delete(scope));
   }
 }
 

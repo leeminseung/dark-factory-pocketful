@@ -71,12 +71,16 @@ async function dispatch(req) {
   const body = bodyAbsent ? {} : parseBody(text);
   const context = { state, user, body, params, query: url.searchParams };
 
-  if (!route.idempotent) return route.handler(context);
   // The endpoint is the matched route and its decoded parameters, not the raw spelling:
   // `/payments/` and `/requests/rq%5F1/pay` are the same paths as `/payments` and `/requests/rq_1/pay`.
-  return runIdempotent(state, {
-    userId: user.id, method: req.method, route: route.path, params, key, body,
-  }, () => route.handler(context));
+  const run = route.idempotent
+    ? () => runIdempotent(state, {
+      userId: user.id, method: req.method, route: route.path, params, key, body,
+    }, () => route.handler(context))
+    : () => route.handler(context);
+  // A synchronous handler runs as one transaction: if it throws, whatever it changed is
+  // undone, so no failure (4xx or 5xx) leaves money moved or a key recorded.
+  return route.handler.constructor.name === 'AsyncFunction' ? run() : state.transaction(run);
 }
 
 function send(res, status, body) {
