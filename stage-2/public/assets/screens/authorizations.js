@@ -3,7 +3,7 @@ import { api, readAll } from '../lib/api.js';
 import { fill, h } from '../lib/dom.js';
 import { hatchSwatch } from '../lib/icons.js';
 import { amountHint, decimalOf, formatAmount, parseAmount } from '../lib/money.js';
-import { sentence, uncertainAbout } from '../lib/messages.js';
+import { reservationRefusal, uncertainAbout } from '../lib/messages.js';
 import { timeInSentence } from '../lib/time.js';
 import { LatestRead, RetryIdentity, handleText, stripLoading, button, chip, emptyState, feedback, field, loadingRows, plate } from '../lib/ui.js';
 
@@ -114,12 +114,8 @@ export function renderAuthorizations(ctx, main) {
     const body = { amount: minor };
     const result = await api('POST', `/authorizations/${encodeURIComponent(id)}/capture`, { body, key: identities.get(id).current(JSON.stringify(body)) });
     if (!result.unknown) identities.get(id).settle();
-    await settle(a, result, `Collected ${fmt(minor)}.`, (refused) => {
-      if (refused.code === 'capture_exceeds_authorization') {
-        return `Couldn't collect ${fmt(minor)}. Only ${fmt(a.remaining_amount)} is left to collect.`;
-      }
-      return closedMessage(refused);
-    }, 'collection');
+    await settle(a, result, `Collected ${fmt(minor)}.`,
+      (refused) => reservationRefusal(refused, { money, amount: minor, remaining: a.remaining_amount }), 'collection');
     if (result.ok) captureInputs.delete(id);
   }
 
@@ -128,13 +124,8 @@ export function renderAuthorizations(ctx, main) {
     fill(status);
     control.busy(true);
     const result = await api('POST', `/authorizations/${encodeURIComponent(a.authorization_id)}/void`);
-    await settle(a, result, `Released ${fmt(a.remaining_amount)} back to you.`, closedMessage, 'release');
-  }
-
-  function closedMessage(refused) {
-    if (refused.code === 'authorization_expired') return "This reservation has expired, so it can't be collected. The list has been updated.";
-    if (refused.code === 'authorization_not_open') return 'This reservation is no longer open. The list has been updated.';
-    return `${sentence(refused.message)} The list has been updated.`;
+    await settle(a, result, `Released ${fmt(a.remaining_amount)} back to you.`,
+      (refused) => reservationRefusal(refused, { money, amount: 0, remaining: a.remaining_amount }), 'release');
   }
 
   /** Shows the outcome of a capture or void and refreshes the list; refusals stay on their row. */

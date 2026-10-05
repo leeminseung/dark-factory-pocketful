@@ -56,6 +56,23 @@ export function authRefusal(result, { email, password = '' }) {
   }
 }
 
+/** The words for a refused collection or release of reserved money (design.md §5.6). */
+export function reservationRefusal(result, { money, amount, remaining }) {
+  const fmt = (minor) => formatAmount(minor, money);
+  switch (result.code) {
+    case 'validation_failed':
+      return `Enter an amount from ${fmt(1)} to ${fmt(remaining)}.`;
+    case 'capture_exceeds_authorization':
+      return `Couldn't collect ${fmt(amount)}. Only ${fmt(remaining)} is left to collect.`;
+    case 'authorization_expired':
+      return "This reservation has expired, so it can't be collected. The list has been updated.";
+    case 'authorization_not_open':
+      return 'This reservation is no longer open. The list has been updated.';
+    default:
+      return `${sentence(result.message)} The list has been updated.`;
+  }
+}
+
 /** The words for a refused split, from its code and the handles that were sent. */
 export function splitRefusal(result, { handles }) {
   let reason;
