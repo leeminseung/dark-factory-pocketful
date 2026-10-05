@@ -47,6 +47,8 @@
 - Round 4: product 04f3ca4, suite ba66344: stage-2 858/858, stage-1 554/554; probes 106 receipt edits refused, 59
   legitimate later states replay, stage-1 upgrade OK (work/reviews/acceptance-04f3ca4.md). Failing ids 0; no new
   non-blocking -> re-review of 04f3ca4.
+- Re-review of 04f3ca4: PASS, blocking 0 (work/reviews/review-04f3ca4-recheck.md, 306fe60). R10-R15, S2-102 fixed;
+  supplied --all --mode isolated: stage-1/ claims 1; stage-2/ passes 1-2, fails 3, claims 2. stage-1/ change (R14) checked.
 
 ## Rulings
 - R1 (round 1, pay form changed and changed back after a confirmed payment replays it): BLOCKING. Text: "Submitting it
@@ -66,11 +68,34 @@
   leap year, so 9899-12-31 + 3155760000 s lands on 10000-01-01. The service's bound (9899-12-30) is right.
 
 ## Acceptance
+- Accepted revision: 04f3ca4db90dc9780aa14ccb096b6f67f7e4a8ab (stage folders = 2c1be66), status: passed.
+- Reviewer report: work/reviews/review-04f3ca4-recheck.md; acceptance work/reviews/acceptance-04f3ca4.md; screens
+  work/reviews/design-61246ed.md (last screen review; round 4 changed no screens).
+- Requirement rows covered: stage 2 164 of 164 (7 not testable: 4 freedoms, 3 judged in screen review); stage 1 190 of 190.
+- stage-1/ changed after its stage-1 acceptance (R14 fix, 3c0ba8f, 2c1be66); it passes stage-1 acceptance 554/554 and
+  the supplied stage-1 checks.
 
 ## Open failures, risks, unfixed non-blocking findings
-At loop stop (8c3360d), for the final review (reviewer), then implementer:
-- F1 (S2-102, blocking): "`expires_at` is `created_at` plus `authorization_ttl_seconds`" — clamped near year 10000.
-- D12 (non-blocking, product-designer): wallet-held sits ~10 px above its label after the 44 px link fix.
-- R1-R9 (round 1): implementer reports R1-R7, R9 fixed; R8 history. Status pending final review.
+- Open failures: none.
+- S1-RISK-1 (carried; next: reviewer if auth changes): reduced-N scrypt for seeded users until first login.
+- S2-R19 (non-blocking, history; next: implementer): a restructure-labelled commit changed behaviour.
+- S2-R23 (non-blocking, kept by choice; next: implementer): the retry identity remembers only the last body sent;
+  consistent with the R1 ruling.
+- S1-R17 (kept), S1-R19/S1-R21, S2-R8 (history).
 
 ## Retro
+- Rejected/failed: (1) the TTL bound moved with the clock and expires_at was clamped, so the service refused its own
+  export (R2 -> R10/R11, S2-102); (2) import trusted stored idempotency receipts, so edited receipts replayed false
+  bodies — a stage-1 gap (R14, then F2 S1-158/S2-158); (3) the pay form's retry key survived an edit-and-restore after a
+  confirmed payment (R1), and the headline overflowed 375 px at 10,000,000.00 EUR (R15).
+- Caught by: R1, R2 round-1 review; S2-102 and F2 test-designer probes (rounds 2, 3); R10-R15 final-review probe.
+- Slipped late: R14 (in stage 1 too), R13, R12 and R15 all passed the suite and two screen reviews; screen content
+  stopped at 999,999.99 EUR.
+- Rounds: 4 plus round-1 review, final review and re-review. The loop stopped after round 2 (0 -> 1), restarted after
+  the rejection (7 -> 2 -> 0), and ended when the re-review passed.
+- Watch (test-designer): make receipt-vs-record edits (every field, every idempotent route) and boundary constants
+  (TTL, clock, dates at year 9999) standing tests, and probe "accepted at reset, refused later" for any clock-relative rule.
+- Watch (product-designer): screen content must include the largest legal values (2^53-1 minor units, longest handles,
+  names) in every currency; now in work/design.md §10.
+- Watch (implementer): any limit must be a fixed constant, never relative to now; a new idempotent route must join
+  REPLAY_RULES/receipt rebuilding in every stage folder.
