@@ -23,6 +23,10 @@
 ## Rounds
 - Round 1 started: product 7364e79 (stage-2 = 65a2726); suite 47edfcf (test-designer to fix the `auths` fixture setup
   that over-authorizes bob, 4 setup errors); acceptance check, full screen review, reviewer round-1 review requested.
+- Round 1: product 7364e79, suite ba66344 (858/858; work/reviews/acceptance-7364e79.md). Screen review pass, 0 blocking,
+  D1-D11 non-blocking (work/reviews/design-7364e79.md). Round-1 review work/reviews/review-7364e79-round1.md (standards +
+  spec briefs/raw present): R1 (ruled blocking), R2 blocking, R3-R9 non-blocking. Count 0; reviewer blocking R1, R2 ->
+  round 2; sent R1-R9 and D1-D11 to implementer.
 
 ## Rulings
 - R1 (round 1, pay form changed and changed back after a confirmed payment replays it): BLOCKING. Text: "Submitting it
