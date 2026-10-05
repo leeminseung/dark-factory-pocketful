@@ -29,6 +29,10 @@
   round 2; sent R1-R9 and D1-D11 to implementer.
 - Round 2 started: product 8c3360d (stage-2 = 1b1322f), suite ba66344; acceptance check + screen review of touched
   screens and D1-D11.
+- Round 2: product 8c3360d, suite ba66344 (858/858). Screens pass, 0 blocking, D12 new non-blocking
+  (work/reviews/design-8c3360d.md). Probes fail S2-102 (F1: at TTLs near the accepted bound, later authorizations get
+  expires_at clamped to 9999-12-31T23:59:59.999, not created_at + ttl; work/reviews/acceptance-8c3360d.md). Count 1 vs
+  previous 0 -> did not fall -> loop stopped; final review on 8c3360d.
 
 ## Rulings
 - R1 (round 1, pay form changed and changed back after a confirmed payment replays it): BLOCKING. Text: "Submitting it
@@ -42,5 +46,9 @@
 ## Acceptance
 
 ## Open failures, risks, unfixed non-blocking findings
+At loop stop (8c3360d), for the final review (reviewer), then implementer:
+- F1 (S2-102, blocking): "`expires_at` is `created_at` plus `authorization_ttl_seconds`" — clamped near year 10000.
+- D12 (non-blocking, product-designer): wallet-held sits ~10 px above its label after the 44 px link fix.
+- R1-R9 (round 1): implementer reports R1-R7, R9 fixed; R8 history. Status pending final review.
 
 ## Retro
