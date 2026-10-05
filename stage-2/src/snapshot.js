@@ -61,6 +61,17 @@ const list = (s, name) => {
   return value;
 };
 
+const has = (obj, name) => Object.prototype.hasOwnProperty.call(obj, name);
+
+/** True when `state` has none of the fields stage 2 added. */
+function isStage1State(state) {
+  const payments = Array.isArray(state.payments) ? state.payments : [];
+  const records = Array.isArray(state.idempotency) ? state.idempotency : [];
+  return !has(state, 'authorizations') && !has(state, 'authorization_ttl_seconds')
+    && !payments.some((p) => isPlainObject(p) && has(p, 'authorization_id'))
+    && !records.some((rec) => isPlainObject(rec) && typeof rec.scope === 'string' && rec.scope.includes('"/authorizations'));
+}
+
 /** Validates an export envelope and builds the State it describes; throws 422 on any defect. */
 export function importState(envelope) {
   if (envelope.track !== TRACK) throw invalid(`track must be "${TRACK}"`);
@@ -72,10 +83,11 @@ export function importState(envelope) {
   users.forEach((u, i) => {
     if (!isPasswordHash(u.password_hash)) throw invalid(`invalid state: users[${i}].password_hash`);
   });
-  // A stage-1 export has no authorizations: it imports as a state with none, the default
-  // lifetime, and payments that came from no authorization (stage 2 "Existing clients after an
-  // upgrade"). A stage-2 export must carry every stage-2 field.
-  const fromStage1 = !Object.prototype.hasOwnProperty.call(s, 'authorizations');
+  // A stage-1 export carries no stage-2 field anywhere: it imports as a state with no
+  // authorizations, the default lifetime, and payments that came from no authorization (stage 2
+  // "Existing clients after an upgrade"). Anything with a stage-2 field is a stage-2 export and
+  // must carry all of them, so removing one is an invalid state, not a stage-1 export.
+  const fromStage1 = isStage1State(s);
   const records = {
     currency: s.currency,
     minorUnits: s.minor_units,

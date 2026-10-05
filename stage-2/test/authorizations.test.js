@@ -316,3 +316,17 @@ test('R10 R11 S2-102 S1-154 (ruling 2abb370): fixed bounds on the lifetime and t
   const atTheEnd = (await call(srv.base, 'GET', '/_test/export')).body;
   assert.equal((await importState(atTheEnd)).status, 204);
 });
+
+test('R13 S2-158 S1-158: a stage-2 export with its authorizations removed is not a stage-1 export: 422', async () => {
+  const w = await world(srv.base);
+  const a = await authorize(w, 'ada', 'bob', 1000);
+  const key = newKey();
+  await w.bob.post(`/authorizations/${a.authorization_id}/capture`, { amount: 500, final: false }, key);
+  const snapshot = (await call(srv.base, 'GET', '/_test/export')).body;
+  const { authorizations, ...withoutAuthorizations } = snapshot.state;
+  const { authorization_ttl_seconds, ...withoutBoth } = withoutAuthorizations;
+  for (const [label, state] of Object.entries({ 'authorizations removed': withoutAuthorizations, 'authorizations and ttl removed': withoutBoth })) {
+    expectError(await call(srv.base, 'POST', '/_test/import', { json: { ...snapshot, state } }), 422, 'validation_failed', label);
+  }
+  assert.equal((await me(w.bob)).total, 3_000, 'nothing changed');
+});
