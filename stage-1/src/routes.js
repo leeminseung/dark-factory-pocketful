@@ -2,7 +2,8 @@
 //   auth:       a valid bearer token is required (§6)
 //   operator:   the caller must be a settlement operator (§11)
 //   idempotent: an Idempotency-Key is required and the handler runs through §7 replay rules
-//   noBody:     the endpoint defines no request body, so whatever is sent is ignored
+//   noBody:     the endpoint defines no request body: none or an empty one is fine, but a body
+//               that is sent must still parse as a JSON object (§5, ruling R3)
 import { login, me, signup } from './handlers/auth.js';
 import { activity, createPayment } from './handlers/payments.js';
 import {

@@ -38,11 +38,19 @@ test('S1-059 S1-157: an empty body to reset, import, signup and login is 400', a
   }
 });
 
-test('decline and cancel take no body: none, empty or any body is accepted', async () => {
+test('R3: decline and cancel accept no body, an empty one or a JSON object; an unparseable one is 400', async () => {
   const w = await world(srv.base);
-  for (const raw of [undefined, '', '{oops']) {
-    const rq = (await w.bob.post('/requests', { payer_handle: 'ada', amount: 1 }, newKey())).body.request_id;
-    assert.equal((await call(srv.base, 'POST', `/requests/${rq}/decline`, { token: w.ada.token, raw })).status, 200);
+  for (const action of ['decline', 'cancel']) {
+    const actor = action === 'decline' ? w.ada : w.bob;
+    for (const [raw, status] of [[undefined, 200], ['', 200], ['{"x": 1}', 200], ['{oops', 400], ['[1]', 400]]) {
+      const rq = (await w.bob.post('/requests', { payer_handle: 'ada', amount: 1 }, newKey())).body.request_id;
+      const res = await call(srv.base, 'POST', `/requests/${rq}/${action}`, { token: actor.token, raw });
+      assert.equal(res.status, status, `${action} ${JSON.stringify(raw)}`);
+      if (status === 400) {
+        assert.equal(res.body.error.code, 'malformed_request');
+        assert.equal((await w.ada.get('/requests')).body.requests[0].status, 'pending', 'nothing changed');
+      }
+    }
   }
 });
 

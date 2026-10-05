@@ -40,7 +40,8 @@
   `participant_handles: "ada"`), except the §5 field rules (`amount`, `note`, `visibility` are 422).
   Inside a settlement's `transfers`, every shape error is 422 (§11 "malformed batch shape is 422").
   A body that is not a JSON object is 400, and so is an empty body: it does not parse, and §7 resolves a
-  claimed key only after the body parsed. Decline and cancel define no body, so theirs is ignored.
+  claimed key only after the body parsed. Decline and cancel define no body: none or an
+  empty one is accepted, but a body that is sent must parse as a JSON object (ruling R3).
 - **Fixture rules** beyond negative balance (minor_units, handle pattern, duplicate ids/emails/handles,
   unknown user references, unknown operator ids, seeded totals over 2^53) are 422; wrong JSON types
   in a fixture are 400. Seeded payment and request amounts may be 0 (a paid zero share).

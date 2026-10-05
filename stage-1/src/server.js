@@ -71,7 +71,8 @@ async function dispatch(req) {
   const user = route.auth ? authenticate(state, req.headers.authorization) : null;
   if (route.operator && !state.isOperator(user.id)) throw forbidden('settlement operators only');
   const key = route.idempotent ? idempotencyKey(utf8Header(req.headers['idempotency-key'])) : null;
-  const body = req.method === 'POST' && !route.noBody ? parseBody(text) : {};
+  const bodyAbsent = req.method !== 'POST' || (route.noBody && text === '');
+  const body = bodyAbsent ? {} : parseBody(text);
   const context = { state, user, body, params, query: url.searchParams };
 
   if (!route.idempotent) return route.handler(context);
