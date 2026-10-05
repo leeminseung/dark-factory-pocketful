@@ -78,20 +78,53 @@ def test_ttl_must_be_positive_integer(world, reset, ttl):
     assert world.ada.balance() == 10000
 
 
-@pytest.mark.req("S2-095")
-@pytest.mark.parametrize("change", [{"status": "pending"}, {"status": "OPEN"},
-                                    {"amount": 0}, {"amount": 1.5}, {"amount": 10 ** 9 + 1},
-                                    {"from_user_id": "u_ghost"}, {"to_user_id": "u_ada"},
-                                    {"expires_at": "not a time"},
+@pytest.mark.req("S2-095", "S2-167")
+@pytest.mark.parametrize("change", [{"status": "pending"}, {"status": "OPEN"}, {"status": None},
+                                    {"amount": 0}, {"amount": -1}, {"amount": 1.5},
+                                    {"amount": "100"}, {"amount": 10 ** 9 + 1},
+                                    {"from_user_id": "u_ghost"}, {"to_user_id": "u_ghost"},
+                                    {"to_user_id": "u_ada"},
+                                    {"expires_at": "not a time"}, {"expires_at": None},
                                     {"expires_at": "2026-02-30T10:00:00+00:00"},
-                                    {"visibility": "x"}, {"note": "x" * 201}])
+                                    {"expires_at": "2027-01-01 10:00:00+00:00"},
+                                    {"expires_at": "2027-01-01T10:00:00"},
+                                    {"expires_at": 1798000000},
+                                    {"visibility": "x"}, {"note": "x" * 201}, {"note": None},
+                                    {"__drop__": "expires_at"}, {"__drop__": "status"},
+                                    {"__drop__": "amount"}, {"__drop__": "from_user_id"}])
 def test_bad_seeded_authorization_is_a_reset_error(world, reset, change):
     """S2-095 seeded statuses are the four listed; stage-1 amount, party, note, visibility and
     timestamp rules apply to seeded authorisations too (decision D3)."""
     a = auth("a_1", "ada", "bob", 100)
-    a.update(change)
-    err(reset(fixture2(authorizations=[a]), expect=None), 422, "validation_failed")
+    if "__drop__" in change:
+        del a[change["__drop__"]]
+    else:
+        a.update(change)
+    r = reset(fixture2(authorizations=[a]), expect=None)
+    if change.get("expires_at", "") is None or isinstance(change.get("expires_at"), int):
+        # a field of the wrong JSON type: §5 sends it to 400; the row's 422 also fits
+        err_any(r, {(400, "malformed_request"), (422, "validation_failed")})
+    else:
+        err(r, 422, "validation_failed")
     assert world.ada.balance() == 10000
+    assert me(world.ada)["held"] == 0
+
+
+@pytest.mark.req("S2-167")
+def test_duplicate_seeded_authorization_id(world, reset):
+    """S2-167 a duplicate authorisation id is a reset error, nothing changed."""
+    fx = fixture2(authorizations=[auth("a_1", "ada", "bob", 100), auth("a_1", "bob", "cy", 5)])
+    err(reset(fx, expect=None), 422, "validation_failed")
+    assert world.ada.balance() == 10000 and auths_list(world.ada) == []
+
+
+@pytest.mark.req("S2-167")
+def test_seeded_authorization_at_the_bounds_is_valid(make_world):
+    """S2-167 control: amount 1 and 1000000000, a 200-character note and a private hold seed."""
+    w = make_world(fixture2(users=[user("ada", 10 ** 9 + 1), user("bob", 0)], authorizations=[
+        auth("a_1", "ada", "bob", 10 ** 9, note="😀" * 200, visibility="private"),
+        auth("a_2", "ada", "bob", 1)]))
+    assert me(w.ada)["held"] == 10 ** 9 + 1 and me(w.ada)["available"] == 0
 
 
 @pytest.mark.req("S2-096", "S2-090")
@@ -558,3 +591,74 @@ def test_capture_and_void_race(make_world):
         assert (x["status"] == "captured") == (len(caps) == 1)
         assert me(w.bob)["total"] == before + (500 if caps else 0)
         assert me(w.ada)["held"] == 0
+
+
+@pytest.mark.req("S2-167", "S2-158")
+@pytest.mark.parametrize("bad", [0, 1.5, 10 ** 9 + 1, "2000"])
+def test_edited_authorization_amount_out_of_range(edit_base, api, bad):
+    """S2-167 on import: the authorisation's amount outside 1..1000000000 or not an integer."""
+    def edit(state):
+        recs = [r for r in record_holding(state, edit_base.auth["authorization_id"])
+                if 2000 in r.values()]
+        if not recs:
+            return False
+        for r in recs:
+            for k, v in list(r.items()):
+                if v == 2000:
+                    r[k] = bad
+    import_edited(edit_base, api, edit)
+
+
+@pytest.mark.req("S2-167", "S2-158")
+def test_edited_authorization_parties_equal(edit_base, api):
+    """S2-167 on import: an authorisation whose payer is its receiver."""
+    def edit(state):
+        recs = [r for r in record_holding(state, edit_base.auth["authorization_id"])
+                if "u_bob" in r.values() and "u_ada" in r.values()]
+        if not recs:
+            return False
+        for r in recs:
+            for k, v in list(r.items()):
+                if v == "u_bob":
+                    r[k] = "u_ada"
+    import_edited(edit_base, api, edit)
+
+
+@pytest.mark.req("S2-167", "S2-158")
+def test_edited_duplicate_authorization(edit_base, api):
+    """S2-167 on import: the authorisation record duplicated (same id twice)."""
+    def edit(state):
+        aid = edit_base.auth["authorization_id"]
+        for p in paths_of(state, lambda v: v == aid):
+            parent = get_at(state, p[:-2]) if len(p) >= 2 else None
+            if isinstance(parent, list) and isinstance(get_at(state, p[:-1]), dict):
+                parent.append(copy.deepcopy(get_at(state, p[:-1])))
+                return None
+        return False
+    import_edited(edit_base, api, edit)
+
+
+@pytest.mark.req("S2-168", "S2-078", "S2-090")
+def test_stage1_import_gets_default_ttl(stage1_snapshot, api, reset):
+    """S2-168 a stage-1 export imported into stage 2 gets `authorization_ttl_seconds` 600 and
+    no authorisations, whatever the destination had before."""
+    from conftest import ts
+    s = stage1_snapshot
+    reset(fixture2(ttl=5, authorizations=[auth("a_x", "ada", "bob", 1)]))
+    ok(api().post("/_test/import", s.snap), 204)
+    ada = api(s.ada_token)
+    assert auths_list(ada) == []
+    a = ok(authorize(ada, "bob", 10), 201)
+    assert (ts(a["expires_at"]) - ts(a["created_at"])).total_seconds() == pytest.approx(600, abs=1)
+
+
+@pytest.mark.req("S2-168", "S2-090", "S2-158")
+def test_ttl_survives_stage2_export_import(make_world, api, reset):
+    """S2-168 a stage-2 export/import keeps the fixture's `authorization_ttl_seconds`."""
+    from conftest import ts
+    w = make_world(fixture2(ttl=1234))
+    snap = ok(api().get("/_test/export"), 200)
+    reset(fixture2(ttl=5))
+    ok(api().post("/_test/import", snap), 204)
+    a = ok(authorize(w.ada, "bob", 10), 201)
+    assert (ts(a["expires_at"]) - ts(a["created_at"])).total_seconds() == pytest.approx(1234, abs=1)

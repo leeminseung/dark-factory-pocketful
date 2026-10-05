@@ -461,7 +461,7 @@ def test_only_the_receiver_captures(w):
     assert auths_list(w.ada)[0]["status"] == "open"
 
 
-@pytest.mark.req("S2-130")
+@pytest.mark.req("S2-130", "S2-165")
 @pytest.mark.parametrize("aid", ["a_nope", "x" * 65])
 def test_capture_and_void_unknown(w, aid):
     """S2-130 "Unknown authorisation | 404 `not_found`" — next to a known one that captures."""
@@ -626,10 +626,13 @@ def test_list_status(several, status, keys):
         {ids[k] for k in keys}
 
 
-@pytest.mark.req("S2-139", "S1-069")
-@pytest.mark.parametrize("params", [{"direction": "both"}, {"status": "pending"},
-                                    {"status": "OPEN"}, {"limit": "0"}, {"limit": "201"},
-                                    {"offset": "-1"}, {"limit": "1e1"}, {"offset": "+1"}])
+@pytest.mark.req("S2-139", "S2-166", "S1-069")
+@pytest.mark.parametrize("params", [{"direction": "both"}, {"direction": ""},
+                                    {"direction": "INCOMING"}, {"status": "pending"},
+                                    {"status": "OPEN"}, {"status": ""}, {"limit": "0"},
+                                    {"limit": "201"}, {"limit": "-5"}, {"offset": "-1"},
+                                    {"limit": "1e1"}, {"limit": "4.0"}, {"offset": "+1"},
+                                    {"offset": "abc"}, {"limit": "２"}])
 def test_list_bad_params(w, params):
     """S2-139 "`limit`, `offset` and `has_more` behave exactly as on `GET /requests`." """
     err(w.ada.get("/authorizations", params=params), 422, "validation_failed")
@@ -710,3 +713,23 @@ def test_claimed_key_before_validation_on_new_paths(w):
     err(capture(w.bob, aid, {"amount": 999999}, key=k2), 409, "idempotency_key_reuse")
     err(w.bob.request("POST", f"/authorizations/{aid}/capture", content=b"{bad", key=k2), 400,
         "malformed_request")
+
+
+@pytest.mark.req("S2-165")
+def test_void_unknown_next_to_a_known_one(w):
+    """S2-165 void of an unknown authorisation is 404, while a known one voids."""
+    real = ok(authorize(w.ada, "bob", 5), 201)["authorization_id"]
+    err(void(w.ada, "a_" + "z" * 30), 404, "not_found")
+    err(void(w.ada, real + "x"), 404, "not_found")
+    assert ok(void(w.ada, real), 200)["status"] == "voided"
+
+
+@pytest.mark.req("S2-166")
+def test_list_good_params_and_filters_together(w):
+    """S2-166 valid forms are accepted: plain digits (leading zeros), each direction, each
+    status, combined."""
+    ok(authorize(w.ada, "bob", 5), 201)
+    for params in ({"limit": "007"}, {"offset": "0"}, {"direction": "incoming"},
+                   {"direction": "outgoing", "status": "open"}, {"status": "voided"},
+                   {"status": "captured"}, {"status": "expired"}, {"offset": "9" * 30}):
+        ok(w.ada.get("/authorizations", params=params), 200)
