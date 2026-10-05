@@ -20,8 +20,15 @@
   as the fingerprint. The order is: authenticate → operator check (settlements) → key header →
   parse body → resolve a claimed key → field validation and resource checks. Only 201 results are
   recorded, so a key used by a failed (4xx) attempt stays free.
-- **Passwords**: scrypt (N=16384, r=8, p=1, 16-byte random salt). Import accepts only hashes with these
-  parameters, so an imported state cannot request an expensive derivation.
+- **Passwords** (R16): scrypt (N=16384, r=8, p=1) with K = scrypt(password, salt), stored with a
+  per-user salt as HMAC-SHA256(K, userSalt). A reset derives K once per *distinct* password, so a
+  2000-user fixture with one password resets in well under a second and logins are not starved.
+  Trade-off: users seeded with the same password in one reset share the scrypt salt, so cracking
+  that password once cracks it for all of them; each guess still costs a full scrypt, and stored
+  hashes differ. A fixture with many *distinct* passwords still costs one scrypt each (about
+  25 ms), run two at a time; roughly 700 or more distinct passwords would exceed the 10 s limit.
+  I kept scrypt at its strength rather than weaken it for that case. Import accepts only hashes in
+  this format and with these parameters.
 - **IDs** are generated as `<prefix>_<12 random base64url chars>` and checked against the existing ids,
   so they never collide with ids from a fixture or an import.
 - **Timestamps** are kept as epoch ms and formatted as `…T…Z` with `+00:00`. A per-state clock never
