@@ -24,6 +24,8 @@
 - Round 1: product 09c3a2d (stage-1 = bf9d8e6), suite 94de59b. Acceptance 553/553 (work/reviews/acceptance-09c3a2d.md);
   round-1 review work/reviews/review-09c3a2d-round1.md (standards + spec briefs and raw files present). Failing ids: 0;
   reviewer blocking: R1. Decision: another round; sent R1 (blocking) and R2, R3, R5-R10 (non-blocking) to implementer; R4 ruled no change.
+- Round 2: product d0f71b1 (stage-1 = 6fca369), suite 94de59b. Suite 553/553; probes (work/reviews/acceptance-d0f71b1.md)
+  fail S1-158, S1-073, S1-024 (count 3, previous 0). Count did not fall -> loop stopped; final review on d0f71b1.
 
 ## Rulings
 - R4 (pay with no body is 400): no change. §5: "400 | `malformed_request` | Unparseable body"; §7: the key is resolved
@@ -35,5 +37,11 @@
 ## Acceptance
 
 ## Open failures, risks, unfixed non-blocking findings
+At loop stop (d0f71b1), for the final review (reviewer) and then implementer:
+- F1 (S1-158, S1-073, S1-024): import accepts out-of-range timestamps (created_at_ms 10^20, last_timestamp_ms 10^20,
+  253402300800000) -> later 500s on GET /activity and POST /payments, and non-RFC 3339 "+010000-..." timestamps.
+- F2 (S1-158): import accepts self-contradicting records (paid request with null/unknown payment_id, pending request with
+  payment_id, split shares not summing to amount, payment with settlement_id naming no settlement).
+- R1-R10 from round 1: implementer reports R1, R2, R3, R5-R9 fixed and R4 ruled no change; status pending final review.
 
 ## Retro
