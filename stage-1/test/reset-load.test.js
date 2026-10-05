@@ -24,3 +24,21 @@ test('R16: a 2000-user reset is fast, and a login during it is not held up', asy
   const wrong = await call(srv.base, 'POST', '/auth/login', { json: { email: 'u5@example.com', password: 'wrong horse' } });
   assert.equal(wrong.status, 401);
 });
+
+test('S1-013 F3: 3000 users with distinct passwords reset fast; first login upgrades the hash', async () => {
+  const users = Array.from({ length: 3000 }, (_, i) => user(`d${i}`, 1, { password: `pw-${i}-distinct` }));
+  const started = Date.now();
+  const res = await call(srv.base, 'POST', '/_test/reset', { json: fixture({ users }) });
+  const resetMs = Date.now() - started;
+  assert.equal(res.status, 204);
+  assert.ok(resetMs < 3_000, `reset took ${resetMs} ms`);
+  const last = users.at(-1);
+  const hashOf = async (id) => (await call(srv.base, 'GET', '/_test/export')).body.state.users.find((u) => u.id === id).password_hash;
+  const seededHash = await hashOf(last.id);
+  assert.equal((await call(srv.base, 'POST', '/auth/login', { json: { email: last.email, password: last.password } })).status, 200);
+  assert.equal((await call(srv.base, 'POST', '/auth/login', { json: { email: last.email, password: users[0].password } })).status, 401);
+  const upgraded = await hashOf(last.id);
+  assert.notEqual(upgraded, seededHash);
+  assert.match(upgraded, /^scrypt\$16384\$/, 'full strength after the first login');
+  assert.equal((await call(srv.base, 'POST', '/auth/login', { json: { email: last.email, password: last.password } })).status, 200);
+});

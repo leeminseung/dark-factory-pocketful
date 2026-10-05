@@ -20,15 +20,22 @@
   as the fingerprint. The order is: authenticate → operator check (settlements) → key header →
   parse body → resolve a claimed key → field validation and resource checks. Only 201 results are
   recorded, so a key used by a failed (4xx) attempt stays free.
-- **Passwords** (R16): scrypt (N=16384, r=8, p=1) with K = scrypt(password, salt), stored with a
-  per-user salt as HMAC-SHA256(K, userSalt). A reset derives K once per *distinct* password, so a
-  2000-user fixture with one password resets in well under a second and logins are not starved.
-  Trade-off: users seeded with the same password in one reset share the scrypt salt, so cracking
-  that password once cracks it for all of them; each guess still costs a full scrypt, and stored
-  hashes differ. A fixture with many *distinct* passwords still costs one scrypt each (about
-  25 ms), run two at a time; roughly 700 or more distinct passwords would exceed the 10 s limit.
-  I kept scrypt at its strength rather than weaken it for that case. Import accepts only hashes in
-  this format and with these parameters.
+- **Passwords** (R16, S1-013 F3): scrypt (r=8, p=1), K = scrypt(password, salt), stored with a per-user
+  salt as HMAC-SHA256(K, userSalt). Signup always uses full strength, N=16384 (about 25 ms).
+  A reset must fit 10 s whatever the user count, so it hashes the fixture as one batch:
+  - equal passwords share one derivation;
+  - N is the largest power of two from 16384 down to 256 at which the batch fits a 4 s budget on two
+    workers. The budget comes from one full-strength derivation measured at startup. For example,
+    300 distinct passwords stay at N=16384, 1000 get N=4096, and 3000 get N=1024;
+  - a seeded hash below full strength is replaced with a full-strength one at that user's first
+    successful login.
+
+  Trade-off: until a seeded user first logs in, their hash is up to 64 times cheaper to attack than a
+  signup's, and users seeded with the same password share its scrypt salt. These are test fixtures
+  loaded through an unauthenticated test endpoint, and every stored hash is still a salted scrypt
+  hash; I chose that over a reset that overruns its limit. Beyond about 20000 distinct passwords,
+  even N=256 exceeds the budget. Import accepts only these parameters (N a power of two in
+  256..16384).
 - **IDs** are generated as `<prefix>_<12 random base64url chars>` and checked against the existing ids,
   so they never collide with ids from a fixture or an import.
 - **Timestamps** are kept as epoch ms and formatted as `…T…Z` with `+00:00`. A per-state clock never

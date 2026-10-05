@@ -5,7 +5,7 @@
 // records.js's checkRecords, shared with import. The whole fixture is judged before
 // anything is built, so a rejected fixture changes nothing.
 import { invalid, malformed } from './errors.js';
-import { hashPasswords } from './passwords.js';
+import { hashSeededPasswords } from './passwords.js';
 import { checkRecords, stateFromRecords } from './records.js';
 import { isPlainObject } from './validate.js';
 
@@ -96,7 +96,7 @@ export function parseFixture(body) {
 
 /** Builds a fresh State from parsed fixture records. Seeded balances are taken as already net. */
 export async function buildState(records) {
-  const hashes = await hashPasswords(records.users.map((u) => u.password));
+  const hashes = await hashSeededPasswords(records.users.map((u) => u.password));
   const users = records.users.map(({ password, ...user }, i) => ({ ...user, passwordHash: hashes[i] }));
   return stateFromRecords({ ...records, users });
 }

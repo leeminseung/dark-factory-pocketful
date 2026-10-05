@@ -1,6 +1,6 @@
 // POST /auth/signup, POST /auth/login (§6) and GET /me (§8).
 import { emailTaken, handleTaken, invalid, unauthenticated } from '../errors.js';
-import { hashPassword, verifyNothing, verifyPassword } from '../passwords.js';
+import { hashPassword, needsUpgrade, verifyNothing, verifyPassword } from '../passwords.js';
 import { charCount, isEmail } from '../model.js';
 import { requiredString } from '../validate.js';
 import { meView, sessionView } from '../views.js';
@@ -45,6 +45,8 @@ export async function login({ state, body }) {
   const user = state.userByEmail(email);
   const ok = user ? await verifyPassword(password, user.passwordHash) : await verifyNothing(password);
   if (!ok) throw unauthenticated('wrong email or password');
+  // A seeded hash may be below full strength (passwords.js); replace it now that we hold the password.
+  if (needsUpgrade(user.passwordHash)) user.passwordHash = await hashPassword(password);
   return { status: 200, body: sessionView(user, state.issueToken(user.id)) };
 }
 

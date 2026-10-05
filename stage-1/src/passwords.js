@@ -1,24 +1,45 @@
 // Password hashing (§6). Plaintext is never stored.
 //
 // A stored hash is "scrypt$N$r$p$salt$userSalt$mac": K = scrypt(password, salt) and
-// mac = HMAC-SHA256(K, userSalt). Verifying a password costs one scrypt.
+// mac = HMAC-SHA256(K, userSalt). Verifying a password costs one scrypt at the stored N.
 //
-// A reset can seed thousands of users, most with the same password, and a full scrypt per
-// user overran the 10 s reset limit and starved concurrent logins (R16). So hashPasswords
-// derives K once per distinct password in a batch, with a fresh salt for that password, and
-// gives each user their own userSalt and mac. Users who share a password share the scrypt
-// salt, which means cracking that password once cracks it for all of them. But their stored
-// hashes differ, and each guess still costs a full scrypt. Distinct passwords still cost one
-// scrypt each, run at most HASH_CONCURRENCY at a time so logins keep a worker free.
+// Signup always hashes at full strength (N = FULL_N). A reset must fit 10 s for any number of
+// seeded users (§2, S1-013), so it hashes the fixture as one batch:
+// - equal passwords in the batch share one scrypt derivation (with their own userSalt and mac);
+// - the batch's N is the largest power of two, from FULL_N down to MIN_N, at which the batch fits
+//   SEED_BUDGET_MS on HASH_CONCURRENCY workers, from a cost measured on this machine at startup;
+// - a seeded hash below FULL_N is replaced with a full-strength one at that user's first login.
+// Trade-off: until a seeded user first logs in, their stored hash is cheaper to attack than a
+// signup's, and users seeded with the same password share its scrypt salt. Each stays a salted
+// scrypt hash, and no plaintext is kept.
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 
-const PARAMS = { N: 16384, r: 8, p: 1 };
+const FULL_N = 16384;
+const MIN_N = 256;
+const R = 8;
+const P = 1;
 const KEY_BYTES = 32;
-const HASH_CONCURRENCY = 2;
+const HASH_CONCURRENCY = 2; // the service's CPU budget (§2: 2 vCPU)
+const SEED_BUDGET_MS = 4000; // of the 10 s reset limit, leaving room for parsing and slower runs
 
-const derive = (password, salt, params) =>
+const derive = (password, salt, N) =>
   new Promise((resolve, reject) =>
-    scrypt(password, salt, KEY_BYTES, params, (err, key) => (err ? reject(err) : resolve(key))));
+    scrypt(password, salt, KEY_BYTES, { N, r: R, p: P }, (err, key) => (err ? reject(err) : resolve(key))));
+
+// Milliseconds one full-strength derivation takes here; measured once at startup.
+let fullCostMs = 25;
+const calibrating = (async () => {
+  const started = performance.now();
+  await derive('calibration', Buffer.alloc(16), FULL_N);
+  fullCostMs = Math.max(1, performance.now() - started);
+})();
+
+/** The largest N from FULL_N down to MIN_N at which `count` derivations fit the seeding budget. */
+function seedCost(count) {
+  let N = FULL_N;
+  while (N > MIN_N && (count * fullCostMs * (N / FULL_N)) / HASH_CONCURRENCY > SEED_BUDGET_MS) N /= 2;
+  return N;
+}
 
 const mac = (key, userSalt) => createHmac('sha256', key).update(userSalt).digest();
 const b64 = (buffer) => buffer.toString('base64url');
@@ -38,23 +59,28 @@ async function mapLimited(items, limit, work) {
   return results;
 }
 
-/** Hashes each password; equal passwords in the batch share one scrypt derivation. */
-export async function hashPasswords(passwords) {
+async function hashBatch(passwords, N) {
   const distinct = [...new Set(passwords)];
   const derived = await mapLimited(distinct, HASH_CONCURRENCY, async (password) => {
     const salt = randomBytes(16);
-    return { salt, key: await derive(password, salt, PARAMS) };
+    return { salt, key: await derive(password, salt, N) };
   });
   const byPassword = new Map(distinct.map((password, i) => [password, derived[i]]));
-  const { N, r, p } = PARAMS;
   return passwords.map((password) => {
     const { salt, key } = byPassword.get(password);
     const userSalt = randomBytes(16);
-    return ['scrypt', N, r, p, b64(salt), b64(userSalt), b64(mac(key, userSalt))].join('$');
+    return ['scrypt', N, R, P, b64(salt), b64(userSalt), b64(mac(key, userSalt))].join('$');
   });
 }
 
-export const hashPassword = async (password) => (await hashPasswords([password]))[0];
+/** One password at full strength (signup, and the upgrade at a seeded user's first login). */
+export const hashPassword = async (password) => (await hashBatch([password], FULL_N))[0];
+
+/** A reset's passwords, at the strongest cost that fits the seeding budget. */
+export async function hashSeededPasswords(passwords) {
+  await calibrating;
+  return hashBatch(passwords, seedCost(new Set(passwords).size));
+}
 
 const HASH_FORMAT = /^scrypt\$(\d+)\$(\d+)\$(\d+)\$([A-Za-z0-9_-]+)\$([A-Za-z0-9_-]+)\$([A-Za-z0-9_-]+)$/;
 
@@ -64,8 +90,11 @@ function parseHash(hash) {
   const [, N, r, p, salt, userSalt, digest] = match;
   // Accept only parameters this service produces, so an imported hash cannot make
   // verification fail or exhaust memory.
-  if (Number(N) !== PARAMS.N || Number(r) !== PARAMS.r || Number(p) !== PARAMS.p) return null;
+  const n = Number(N);
+  const isProducedN = n >= MIN_N && n <= FULL_N && (n & (n - 1)) === 0;
+  if (!isProducedN || Number(r) !== R || Number(p) !== P) return null;
   return {
+    N: n,
     salt: Buffer.from(salt, 'base64url'),
     userSalt: Buffer.from(userSalt, 'base64url'),
     digest: Buffer.from(digest, 'base64url'),
@@ -74,15 +103,18 @@ function parseHash(hash) {
 
 export const isPasswordHash = (value) => parseHash(value) !== null;
 
+/** True when `hash` is a seeded hash below full strength, to be replaced at the next login. */
+export const needsUpgrade = (hash) => parseHash(hash).N < FULL_N;
+
 /** True when `password` matches `hash`. */
 export async function verifyPassword(password, hash) {
-  const { salt, userSalt, digest } = parseHash(hash);
-  const candidate = mac(await derive(password, salt, PARAMS), userSalt);
+  const { N, salt, userSalt, digest } = parseHash(hash);
+  const candidate = mac(await derive(password, salt, N), userSalt);
   return candidate.length === digest.length && timingSafeEqual(candidate, digest);
 }
 
 /** Spends the same work as a verification, so an unknown email is not faster to reject. */
 export async function verifyNothing(password) {
-  await derive(password, Buffer.alloc(16), PARAMS);
+  await derive(password, Buffer.alloc(16), FULL_N);
   return false;
 }
