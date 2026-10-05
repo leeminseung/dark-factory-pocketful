@@ -25,6 +25,13 @@
   that over-authorizes bob, 4 setup errors); acceptance check, full screen review, reviewer round-1 review requested.
 
 ## Rulings
+- R1 (round 1, pay form changed and changed back after a confirmed payment replays it): BLOCKING. Text: "Submitting it
+  again without changing a field must not send another payment" / "Changing a field makes the next submission a new
+  payment request." Most literal reading: the act of changing a field (not a net difference of values) makes the next
+  submission new. The only text that keeps an old key across edits is the uncertain-outcome rule, "Keep the unchanged
+  form retryable with the **same key and body**. ... Unknown outcomes are not confirmed rejections." So: while an
+  outcome is unknown, a form restored to the sent body reuses its key (S2-074 edit-then-restore test stands); after a
+  confirmed success or refusal, any field change starts a new key.
 
 ## Acceptance
 
