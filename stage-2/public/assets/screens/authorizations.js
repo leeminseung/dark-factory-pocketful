@@ -5,7 +5,7 @@ import { hatchSwatch } from '../lib/icons.js';
 import { amountHint, decimalOf, formatAmount, parseAmount } from '../lib/money.js';
 import { sentence, uncertainAbout } from '../lib/messages.js';
 import { deadline, friendlyTime } from '../lib/time.js';
-import { LatestRead, RetryIdentity, handleText, button, chip, emptyState, feedback, field, loadingRows, plate } from '../lib/ui.js';
+import { LatestRead, RetryIdentity, handleText, stripLoading, button, chip, emptyState, feedback, field, loadingRows, plate } from '../lib/ui.js';
 
 export function renderAuthorizations(ctx, main) {
   const { money } = ctx;
@@ -16,7 +16,7 @@ export function renderAuthorizations(ctx, main) {
   const identities = new Map(); // authorization id -> retry identity of its capture
   const captureInputs = new Map(); // authorization id -> typed amount, kept across refreshes
 
-  const strip = h('section', { class: 'plum-strip', 'aria-label': 'Reserved money' });
+  const strip = h('section', { class: 'plum-strip', 'aria-label': 'Reserved money' }, stripLoading());
   const status = h('div', { class: 'screen-feedback' });
   const body = h('div', { class: 'sections' }, loadingRows('Loading reserved money…'));
   fill(main, h('h1', { class: 'page-title' }, 'Reserved money'), strip, status, body);

@@ -86,6 +86,12 @@ export const plate = (handle, direction, { held = false } = {}) => h('span', {
   class: `plate${held ? ' plate-held' : ''}`, 'aria-hidden': 'true',
 }, handle.slice(0, 2).toUpperCase(), direction && h('span', { class: 'plate-glyph' }, icon(direction)));
 
+/** A plum strip's loading state: "Loading…" at the height its figures will have (design.md §4). */
+export const stripLoading = () => [
+  h('p', { class: 'strip-label', role: 'status' }, 'Loading…'),
+  h('p', { class: 'strip-figure strip-placeholder', 'aria-hidden': 'true' }, '\u00a0'),
+];
+
 /** "Loading …" above three placeholder rows of row height. */
 export const loadingRows = (text) => h('div', { class: 'loading', role: 'status' },
   h('p', { class: 'meta' }, text),

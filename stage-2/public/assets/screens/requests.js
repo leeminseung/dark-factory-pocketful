@@ -4,7 +4,7 @@ import { fill, h } from '../lib/dom.js';
 import { formatAmount } from '../lib/money.js';
 import { sentence, uncertainAbout } from '../lib/messages.js';
 import { timeEl } from '../lib/time.js';
-import { LatestRead, RetryIdentity, handleText, button, chip, emptyState, feedback, loadingRows, plate } from '../lib/ui.js';
+import { LatestRead, RetryIdentity, handleText, stripLoading, button, chip, emptyState, feedback, loadingRows, plate } from '../lib/ui.js';
 
 export function renderRequests(ctx, main) {
   const { money } = ctx;
@@ -14,7 +14,7 @@ export function renderRequests(ctx, main) {
   // One retry identity per request, so a repeated Pay click on the same request is a replay.
   const payIdentities = new Map();
 
-  const strip = h('section', { class: 'plum-strip', 'aria-label': 'Waiting for you' });
+  const strip = h('section', { class: 'plum-strip', 'aria-label': 'Waiting for you' }, stripLoading());
   const status = h('div', { class: 'screen-feedback' });
   const body = h('div', { class: 'sections' }, loadingRows('Loading requests…'));
   fill(main, h('h1', { class: 'page-title' }, 'Requests'), strip, status, body);
