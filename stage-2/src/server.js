@@ -3,6 +3,7 @@ import http from 'node:http';
 import { ApiError, forbidden, malformed, notFound, unauthenticated } from './errors.js';
 import { runIdempotent } from './idempotency.js';
 import { parseJson } from './json.js';
+import { staticResponse } from './pages.js';
 import { matchRoute } from './routes.js';
 import { store } from './state.js';
 import { idempotencyKey, isPlainObject } from './validate.js';
@@ -108,8 +109,20 @@ function send(res, status, body) {
   res.end(payload);
 }
 
+function sendStatic(res, { body, type }) {
+  res.writeHead(200, { 'Content-Type': type, 'Content-Length': body.length, 'Cache-Control': 'no-cache' });
+  res.end(body);
+}
+
 async function handle(req, res) {
   try {
+    if (req.method === 'GET') {
+      const asset = staticResponse(new URL(req.url, 'http://localhost').pathname, req.headers.accept);
+      if (asset) {
+        sendStatic(res, asset);
+        return;
+      }
+    }
     const { status, body } = await dispatch(req);
     send(res, status, body);
   } catch (err) {

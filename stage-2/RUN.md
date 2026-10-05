@@ -1,6 +1,7 @@
-# Pocketful — stage 1
+# Pocketful — stage 2
 
-An HTTP service for payments, requests, splits, an activity feed and operator settlements.
+An HTTP service for payments, requests, splits, an activity feed, operator settlements and
+payment authorizations (holds, captures, voids), with browser screens.
 Node.js 22, no third-party packages; all state is held in memory.
 
 ## Build and start
@@ -8,7 +9,7 @@ Node.js 22, no third-party packages; all state is held in memory.
 From this folder:
 
 ```sh
-docker build -t pocketful-stage-1 . && docker run --rm -e PORT=8080 -p 8080:8080 pocketful-stage-1
+docker build -t pocketful-stage-2 . && docker run --rm -e PORT=8080 -p 8080:8080 pocketful-stage-2
 ```
 
 The service listens on `0.0.0.0:$PORT` (default `8080`) and answers `GET /health` with
@@ -40,3 +41,5 @@ Runs the service's own tests (`test/*.test.js`) against an in-process server; ne
 | `src/idempotency.js` | §7 key resolution and replay |
 | `src/fixture.js`, `src/snapshot.js` | reset fixtures, export and import |
 | `src/handlers/` | one module per resource |
+| `src/records.js` | the one validator for reset and import, and building a State |
+| `src/pages.js`, `public/` | the screens (single page) and their bundled assets |
