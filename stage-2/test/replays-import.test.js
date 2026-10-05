@@ -43,6 +43,17 @@ test('R14: an import whose stored replays contradict the records is 422', async 
     'fingerprint disagrees with its receipt': editReplay('/payments', (rec) => ({
       fingerprint: rec.fingerprint.replace(/"amount":\d+/, '"amount":11'),
     })),
+    'F2 request receipt status changed': editReplay('/requests', body({ status: 'declined' })),
+    'F2 split receipt note changed': editReplay('/splits', body({ note: 'edited' })),
+    'F2 split receipt share changed': editReplay('/splits', (rec) => body({ shares: rec.response.body.shares.map((x, i) => (i === 0 ? { ...x, amount: x.amount + 1 } : x)) })(rec)),
+    'F2 split receipt request status changed': editReplay('/splits', (rec) => body({ requests: rec.response.body.requests.map((q) => ({ ...q, status: 'paid' })) })(rec)),
+    'F2 authorization receipt note changed': editReplay('/authorizations', body({ note: 'edited' })),
+    'F2 authorization receipt status changed': editReplay('/authorizations', body({ status: 'declined' })),
+    'F2 authorization receipt captured changed': editReplay('/authorizations', body({ captured_amount: 5 })),
+    'F2 payment receipt visibility changed': editReplay('/payments', body({ visibility: 'private' })),
+    'F2 payment receipt with an extra field': editReplay('/payments', body({ extra: 1 })),
+    'F2 capture receipt currency changed': editReplay('/authorizations/:id/capture', body({ currency: 'USD' })),
+    'F2 settlement member note changed': editReplay('/settlements', (rec) => body({ payments: rec.response.body.payments.map((p) => ({ ...p, note: 'edited' })) })(rec)),
     'replay under an unknown route': editReplay('/payments', (rec) => {
       const [u, m, , p, k] = JSON.parse(rec.scope);
       return { scope: JSON.stringify([u, m, '/nowhere', p, k]) };
