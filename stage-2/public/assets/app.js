@@ -13,9 +13,9 @@ import { renderAuthorizations } from './screens/authorizations.js';
 
 const SCREENS = {
   '/': { render: renderWallet, nav: 'Wallet' },
-  '/requests': { render: renderRequests, nav: 'Requests' },
+  '/requests': { render: renderRequests, nav: 'Requests', column: true },
   '/split': { render: renderSplit, nav: 'Split' },
-  '/authorizations': { render: renderAuthorizations, nav: 'Reserved' },
+  '/authorizations': { render: renderAuthorizations, nav: 'Reserved', column: true },
   '/login': { render: renderFrontDoor('login'), front: true },
   '/signup': { render: renderFrontDoor('signup'), front: true },
 };
@@ -82,7 +82,7 @@ async function show() {
     signOut();
     return;
   }
-  const main = h('main', { class: screen.front ? 'front' : 'container screen', id: 'main' });
+  const main = h('main', { class: screen.front ? 'front' : `container screen${screen.column ? ' column' : ''}`, id: 'main' });
   fill(root, me ? header(route) : null, main);
   const ctx = {
     me,

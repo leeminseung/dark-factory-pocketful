@@ -58,6 +58,8 @@ time, .row-amount, .available-figure, dd, .share-amount, .amount-inline { font-v
 .container { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 var(--gutter); min-width: 0; }
 .screen { padding-top: 24px; padding-bottom: 72px; display: grid; gap: 32px; min-width: 0; }
 .screen > * { min-width: 0; }
+/* List routes are one left-aligned column of at most 760 px (design.md §3). */
+.screen.column > * { max-width: 760px; width: 100%; }
 .meta { font-size: 13px; color: var(--graphite); }
 .page-title { font-size: 25px; font-weight: 400; }
 @media (min-width: 601px) { .page-title { font-size: 31px; } }
