@@ -70,3 +70,9 @@ Stage 1's notes (work/stage-1/notes.md) still apply to everything stage 2 did no
 
 - R8 (commit discipline): ab98ad7 and 4e74eea cannot be split after the fact. From round 2 on, each
   commit has one purpose.
+- R19: 3f358f2 was labelled a restructure but changed behaviour; 8afb994 restored it. That restored rule (a
+  failed read shows its message only when it is the latest read) rests on `LatestRead.isLatest`, which
+  test/latest-read.test.js covers. A browser test that stages a stale failed read is not added: the screen
+  gives no way to start a second read while the first has not rendered.
+- R23: the retry identity remembers only the last body sent. This is the R1 ruling as given: a later
+  answered submission confirms an outcome, and after that any edit starts a new key.
