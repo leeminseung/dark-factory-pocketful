@@ -82,7 +82,10 @@ export function renderAuthorizations(ctx, main) {
     const amount = field({
       label: 'Amount to collect', testid: `authorization-capture-amount-${id}`, inputmode: 'decimal', suffix: money.currency,
       value: captureInputs.get(id) ?? decimalOf(a.remaining_amount, money), autocomplete: 'off',
-      onInput: () => captureInputs.set(id, amount.input.value),
+      onInput: () => {
+        captureInputs.set(id, amount.input.value);
+        identities.get(id)?.edited();
+      },
     });
     const control = button({ label: 'Collect', busyLabel: 'Collecting…', testid: `authorization-capture-${id}`, onClick: () => capture(a, amount, control) });
     return h('div', { class: 'capture' }, amount.el, h('div', { class: 'row-actions' }, control.el));
@@ -110,6 +113,7 @@ export function renderAuthorizations(ctx, main) {
     control.busy(true);
     const body = { amount: minor };
     const result = await api('POST', `/authorizations/${encodeURIComponent(id)}/capture`, { body, key: identities.get(id).current(JSON.stringify(body)) });
+    if (!result.unknown) identities.get(id).settle();
     await settle(a, result, `Collected ${fmt(minor)}.`, (refused) => {
       if (refused.code === 'capture_exceeds_authorization') {
         return `Couldn't collect ${fmt(minor)}. Only ${fmt(a.remaining_amount)} is left to collect.`;

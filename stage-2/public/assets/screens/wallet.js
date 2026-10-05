@@ -82,6 +82,7 @@ export function renderWallet(ctx, main) {
     let uncertain = false;
     // While an answer is missing, the button says "Retry" exactly when the form is the one sent.
     const edited = () => {
+      identity.edited();
       if (uncertain) submit.setLabel(identity.matches(JSON.stringify(bodyNow())) ? spec.retryLabel : spec.label);
     };
     const handle = field({ label: 'Handle', testid: `${name}-handle`, hint: 'Their Pocketful handle, like ada', autocomplete: 'off', onInput: edited });
@@ -115,6 +116,7 @@ export function renderWallet(ctx, main) {
       if (!ctx.view.alive) return;
       uncertain = false;
       submit.setLabel(spec.label);
+      if (!result.unknown) identity.settle();
       if (result.ok) {
         fill(out, feedback('success', null, spec.success(fmt(minor), body[spec.handleKey])));
         await refresh();

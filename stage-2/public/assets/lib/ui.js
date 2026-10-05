@@ -91,15 +91,20 @@ export const emptyState = ({ testid, title, body, action, href, onAction }) => h
   h('a', { href, class: 'link', onclick: onAction }, action));
 
 /**
- * The retry identity of one write (stage-1 §7, stage 2 "Retries follow §7"): the key belongs to
- * the body last sent. Sending the same body again — a resubmit, a retry after a lost response,
- * or a form edited and changed back — reuses it, so it is a replay and moves money at most once.
- * A different body gets a new key, so it is a new write.
+ * The retry identity of one write (stage-1 §7; stage 2 "Retries follow §7", ruling 63ae1ef).
+ * The key belongs to the body last sent:
+ * - submitting again with no field changed reuses it (a replay: money moves at most once);
+ * - after a confirmed answer (`settle`: success or refusal), changing any field starts a new key
+ *   for the next submission, even if the value is changed back ("Changing a field makes the next
+ *   submission a new payment request");
+ * - while the answer is unknown, a form restored to the sent body keeps its key ("Keep the
+ *   unchanged form retryable with the same key and body"); a different body gets a new key.
  */
 export class RetryIdentity {
   constructor() {
     this.body = null;
     this.key = null;
+    this.settled = false;
   }
 
   /** The key for sending `bodyText` (the body as JSON text). */
@@ -107,8 +112,20 @@ export class RetryIdentity {
     if (bodyText !== this.body) {
       this.body = bodyText;
       this.key = newKey();
+      this.settled = false;
     }
     return this.key;
+  }
+
+  /** The service answered the last send: it succeeded or was refused. */
+  settle() { this.settled = true; }
+
+  /** A field changed. After a confirmed answer that ends this identity. */
+  edited() {
+    if (!this.settled) return;
+    this.body = null;
+    this.key = null;
+    this.settled = false;
   }
 
   /** True when `bodyText` is the body last sent, so sending it would be a retry. */
