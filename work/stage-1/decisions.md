@@ -30,6 +30,9 @@
   work/reviews/review-d0f71b1-final.md (fix-commit and probe briefs/raw listed; supplied --all --mode isolated pass).
   R1-R3, R5-R7, R9 fixed; R4 no change; R8 -> R23, R10 -> R19. Sent R11-R23 + F1/F2 to implementer; rounds continue
   from 3 without reviewer, first compared with 9.
+- Round 3: product 824d084 (stage-1 = 6e91768), suite 94de59b (553/553). Probes fail S1-013 (F3: reset of 900+ users
+  with distinct passwords > 10 s). Count 1 vs 9 at rejection -> fell; round 4 with F3. Suite now eb4c27d (554, adds the
+  1000-user reset test). Report work/reviews/acceptance-824d084.md.
 
 ## Rulings
 - R4 (pay with no body is 400): no change. §5: "400 | `malformed_request` | Unparseable body"; §7: the key is resolved
