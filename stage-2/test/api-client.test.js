@@ -21,6 +21,10 @@ test('S2-068 S2-071: a read that never answers is abandoned and asked again', as
   assert.ok(Date.now() - started >= READ_TIMEOUT_MS && Date.now() - started < READ_TIMEOUT_MS + 1000);
 });
 
+test('R21: a read is abandoned only after the service\'s own 5 s answer limit, so a slow answer is never asked twice', () => {
+  assert.ok(READ_TIMEOUT_MS > 5000, `READ_TIMEOUT_MS is ${READ_TIMEOUT_MS}`);
+});
+
 test('a write is never retried by the client: a lost answer stays unknown', async () => {
   let calls = 0;
   globalThis.fetch = () => {

@@ -52,7 +52,7 @@ Stage 1's notes (work/stage-1/notes.md) still apply to everything stage 2 did no
 - **Unknown outcome** = the network failed, the response was lost or unreadable, or a 5xx. It shows
   the dashed uncertain line, keeps the key, and does not refresh, because nothing is known. A 4xx is
   a refusal: it shows the form's error, refreshes the data and keeps the inputs.
-- **A lost read is asked again.** A GET that gets no answer within 3 s is abandoned and asked once
+- **A lost read is asked again.** A GET that gets no answer within 6 s (the service answers within 5 s) is abandoned and asked once
   more (reads change nothing). Writes are never retried by the client: their retry is the person's,
   with the same key. This came from the acceptance test test_refresh_waits_for_a_slow_write, which
   failed intermittently (3 of 15 locally). Its `unroute` can strand a read that was intercepted at

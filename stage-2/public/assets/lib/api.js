@@ -21,12 +21,13 @@ export const newKey = () => (crypto.randomUUID ? crypto.randomUUID()
   : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 
 /**
- * How long a read may go unanswered before it counts as lost (the service answers within 5 s,
- * stage-1 §2). A lost read is asked once more: reads change nothing, so asking again is safe,
- * and a screen is never left waiting on an answer that will not come. Writes are never retried
- * here; their retry is the person's, with the same key (lib/ui.js RetryIdentity).
+ * How long a read may go unanswered before it counts as lost. The service answers within 5 s
+ * (stage-1 §2), so a read still waiting at 6 s will not be answered: it is asked once more. Reads
+ * change nothing, so asking again is safe, a slow but live read is never doubled, and a screen is
+ * never left waiting on an answer that will not come. Writes are never retried here; their retry
+ * is the person's, with the same key (lib/ui.js RetryIdentity).
  */
-export const READ_TIMEOUT_MS = 3000;
+export const READ_TIMEOUT_MS = 6000;
 const READ_ATTEMPTS = 2;
 
 /** One fetch: resolves to { response, parsed } or throws when there is no usable answer. */
