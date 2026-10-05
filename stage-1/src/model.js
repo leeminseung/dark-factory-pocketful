@@ -11,6 +11,8 @@ export const BALANCE_LIMIT = 2 ** 53;
 export const MAX_NOTE_CHARS = 200;
 export const VISIBILITIES = ['public', 'private'];
 export const REQUEST_STATUSES = ['pending', 'paid', 'declined', 'cancelled'];
+/** A request leaves `pending` once, for exactly one of these (§4). */
+export const TERMINAL_STATUSES = REQUEST_STATUSES.filter((status) => status !== 'pending');
 export const MINOR_UNITS = [0, 2, 3];
 /** The last instant with an RFC 3339 form (§3.4): 9999-12-31T23:59:59.999Z, as epoch ms. */
 export const MAX_TIMESTAMP_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);

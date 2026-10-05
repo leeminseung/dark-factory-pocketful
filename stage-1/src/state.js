@@ -7,6 +7,7 @@
 // through `closeRequest`, so a request leaves `pending` once and moves money at most once.
 import { randomBytes } from 'node:crypto';
 import { insufficientFunds, requestNotPending } from './errors.js';
+import { TERMINAL_STATUSES } from './model.js';
 
 export class State {
   constructor({ currency, minorUnits }) {
@@ -153,6 +154,7 @@ export class State {
    * (insufficient funds) the request stays pending. Returns the payment, or null.
    */
   closeRequest(request, status, { visibility } = {}) {
+    if (!TERMINAL_STATUSES.includes(status)) throw new Error(`${status} is not a terminal status`);
     if (request.status !== 'pending') throw requestNotPending();
     this.remember(() => {
       request.status = 'pending';

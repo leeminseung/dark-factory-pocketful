@@ -38,3 +38,15 @@ test('a write that fails after moving money leaves no trace, and no idempotency 
   assert.equal(state.users.get('u_a').balance, 60);
   assert.equal(state.idempotency.size, 1);
 });
+
+test('R22: closeRequest accepts only the three terminal statuses', () => {
+  const state = twoUsers();
+  const request = { id: 'rq', requesterId: 'u_b', payerId: 'u_a', amount: 10, note: '', status: 'pending', paymentId: null, createdAt: 1 };
+  state.addRequest(request);
+  for (const status of ['pending', 'open', undefined]) {
+    assert.throws(() => state.closeRequest(request, status), /terminal status/, String(status));
+    assert.equal(request.status, 'pending');
+  }
+  state.closeRequest(request, 'declined');
+  assert.equal(request.status, 'declined');
+});
