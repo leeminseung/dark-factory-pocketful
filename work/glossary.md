@@ -39,3 +39,22 @@ Terms the requirements define or rely on, in the requirements' own words. "§" r
 | transfer | One entry of a settlement: `from_handle`, `to_handle`, `amount`, optional `note`, `visibility`. | stage 1 §11 |
 | affordable | "every wallet's balance after all incoming and outgoing transfers is nonnegative." | stage 1 §11 |
 | member payment | A payment created by a settlement; carries its `settlement_id`, null `request_id`, `created_at` equal to `committed_at`. Nonmembers expose `settlement_id: null`. | stage 1 §11 |
+| total | A wallet's balance; "`balance` **equals `total`**". The sum of all totals equals the seeded total. | stage 2 Authorizations, API |
+| held | "the sum of open holds" on a wallet. | stage 2 API |
+| available | "`available = total − held`", never negative; what the user "can actually spend". | stage 2 Authorizations, UI |
+| authorisation | "A payment may be **authorised** now and **captured** later, for the full amount or less." Fields include `amount`, `captured_amount`, `remaining_amount`, `status`, `expires_at`. | stage 2 Authorizations |
+| hold | What an open authorisation places on the payer's wallet: "it reserves money without moving it". | stage 2 Authorizations |
+| capture | Moving authorised money to the receiver; creates a payment with `authorization_id`. Only the receiver may capture. | stage 2 API |
+| final capture | A capture with `final` true (the default): "closes it and releases any remainder". | stage 2 API |
+| extended capture mode | Captures with `"final": false`, which "keep the remainder held"; status stays `open` until the remainder is used. | stage 2 API |
+| remaining amount | `remaining_amount`: "the amount still held, zero when closed". | stage 2 API |
+| void | The payer "releasing their own hold"; status `voided`. | stage 2 API |
+| expired | "An authorization whose `expires_at` is at or before now is `expired` and holds no funds." | stage 2 Model |
+| authorisation statuses | `open`, `captured`, `voided`, `expired`; "Only `open` holds anything." | stage 2 Model |
+| `authorization_ttl_seconds` | Fixture field: the lifetime of every authorisation created through the API; default 600; a positive integer. | stage 2 Model |
+| formatted amount | "the decimal with exactly `minor_units` decimal places, a single space, then the currency code: `100.00 EUR`"; for `minor_units` 0 "no decimal point at all: `1200 JPY`". | stage 2 Balance and pay |
+| decimal amount input | An amount field "as a person would type it, e.g. `15.00`", converted to minor units; more places than `minor_units` is refused, not rounded. | stage 2 Balance and pay |
+| `data-testid` | The attribute naming each element the integration tests find. | stage 2 intro |
+| uncertain outcome | A payment whose response was lost; shown as `pay-uncertain`, "not confirmed rejections", retryable with the same key and body. | stage 2 Competing clients |
+| latest refresh wins | "a delayed earlier read must not overwrite a later refresh". | stage 2 Competing clients |
+| upgrade | Importing the same team's stage-1 export into the stage-2 service, with signed-in browsers and pending retries surviving. | stage 2 Existing clients |
