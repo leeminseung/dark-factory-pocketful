@@ -2,15 +2,11 @@
 import { invalid, malformed } from '../errors.js';
 import { amount, note } from '../validate.js';
 import { splitView } from '../views.js';
+import { equalShares } from '../shared/shares.js';
 import { userWithHandle } from './handles.js';
 import { addPendingRequest } from './requests.js';
 
-/** Whole units summing to `total`, differing by at most one; the first ones get the extra units. */
-export function equalShares(total, count) {
-  const base = Math.floor(total / count);
-  const remainder = total - base * count;
-  return Array.from({ length: count }, (_, i) => base + (i < remainder ? 1 : 0));
-}
+export { equalShares };
 
 function participantHandles(body) {
   if (!Object.prototype.hasOwnProperty.call(body, 'participant_handles')) {
