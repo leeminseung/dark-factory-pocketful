@@ -9,7 +9,7 @@ import {
   charCount, isBalance, isEmail, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
-import { formatTimestamp } from './clock.js';
+import { paymentView, requestView, settlementView, splitView } from './views.js';
 import { State } from './state.js';
 import { canonicalJson, parseJson } from './json.js';
 import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
@@ -225,72 +225,76 @@ export function stateFromRecords(r) {
 
 /*
  * Stored replays (stage-1 §7, §10): a completed idempotent write keeps its request body
- * (fingerprint) and its original response. Each must describe the record it answered for, or a
- * replay would hand out a receipt for something that does not exist. One rule per idempotent route.
+ * (fingerprint) and its original response, which a replay hands back unchanged. So the stored
+ * response must be exactly the receipt the service gave when the write happened: it is rebuilt
+ * from the records with the same views the API uses, at its moment of creation (a request still
+ * pending), and must equal it field for field.
+ * One rule per idempotent route also ties the receipt to the scope's user and to the request body.
  */
-const sameText = (value, expected) => value === expected;
-const isHandleOf = (users, id) => (handle) => users.get(id)?.handle === handle;
 
-/** The receipt fields a payment response must share with the payment record. */
-function describesPayment(view, p, users) {
-  return Boolean(p) && view.payment_id === p.id && view.from_user_id === p.fromUserId
-    && view.to_user_id === p.toUserId && view.amount === p.amount && view.note === p.note
-    && view.visibility === p.visibility && view.request_id === p.requestId
-    && view.settlement_id === p.settlementId
-    && isHandleOf(users, p.fromUserId)(view.from_handle) && isHandleOf(users, p.toUserId)(view.to_handle)
-    && sameText(view.created_at, formatTimestamp(p.createdAt));
-}
-
-function describesRequest(view, q) {
-  return Boolean(q) && view.request_id === q.id && view.requester_id === q.requesterId
-    && view.payer_id === q.payerId && view.amount === q.amount && view.note === q.note
-    && sameText(view.created_at, formatTimestamp(q.createdAt));
-}
+/** Equal as JSON values. */
+const sameReceipt = (stored, expected) => canonicalJson(stored) === canonicalJson(expected);
 
 const REPLAY_RULES = {
-  '/payments': ({ userId, body, view, find, users }) => {
-    const p = find.payment(view.payment_id);
-    return describesPayment(view, p, users) && p.fromUserId === userId && p.requestId === null
-      && p.settlementId === null
-      && body.amount === p.amount && isHandleOf(users, p.toUserId)(body.to_handle);
+  '/payments': ({ userId, body, receipt, records, view }) => {
+    const p = records.payments.get(receipt.payment_id);
+    return Boolean(p) && p.fromUserId === userId && p.requestId === null && p.settlementId === null
+      && body.amount === p.amount
+      && records.users.get(p.toUserId).handle === body.to_handle
+      && sameReceipt(receipt, view.payment(p));
   },
-  '/requests/:id/pay': ({ userId, params, view, find, users }) => {
-    const p = find.payment(view.payment_id);
-    return describesPayment(view, p, users) && p.fromUserId === userId && p.requestId === params.id;
+  '/requests/:id/pay': ({ userId, params, receipt, records, view }) => {
+    const p = records.payments.get(receipt.payment_id);
+    return Boolean(p) && p.fromUserId === userId && p.requestId === params.id && sameReceipt(receipt, view.payment(p));
   },
-  '/requests': ({ userId, body, view, find, users }) => {
-    const q = find.request(view.request_id);
-    return describesRequest(view, q) && q.requesterId === userId
-      && body.amount === q.amount && isHandleOf(users, q.payerId)(body.payer_handle);
+  '/requests': ({ userId, body, receipt, records, view }) => {
+    const q = records.requests.get(receipt.request_id);
+    return Boolean(q) && q.requesterId === userId && body.amount === q.amount
+      && records.users.get(q.payerId).handle === body.payer_handle
+      && sameReceipt(receipt, view.request(q));
   },
-  '/splits': ({ userId, body, view, find }) => {
-    const sp = find.split(view.split_id);
-    return Boolean(sp) && sp.requesterId === userId && view.amount === sp.amount && body.amount === sp.amount
-      && Array.isArray(view.requests) && canonicalJson(view.requests.map((q) => q?.request_id)) === canonicalJson(sp.requestIds)
-      && view.requests.every((q) => describesRequest(q, find.request(q.request_id)))
-      && sameText(view.created_at, formatTimestamp(sp.createdAt));
+  '/splits': ({ userId, body, receipt, records, view }) => {
+    const sp = records.splits.get(receipt.split_id);
+    return Boolean(sp) && sp.requesterId === userId && body.amount === sp.amount
+      && sameReceipt(receipt, view.split(sp));
   },
-  '/settlements': ({ view, find, users }) => {
-    const st = find.settlement(view.settlement_id);
-    return Boolean(st) && Array.isArray(view.payments)
-      && canonicalJson(view.payments.map((p) => p?.payment_id)) === canonicalJson(st.paymentIds)
-      && view.payments.every((p) => describesPayment(p, find.payment(p.payment_id), users))
-      && sameText(view.committed_at, formatTimestamp(st.committedAt));
+  '/settlements': ({ receipt, records, view }) => {
+    const st = records.settlements.get(receipt.settlement_id);
+    return Boolean(st) && sameReceipt(receipt, view.settlement(st));
   },
 };
 
+/** The receipts each kind of write returned when it happened, built with the API's own views. */
+function creationViews(r, records) {
+  const atCreation = {
+    request: (q) => ({ ...q, status: 'pending', paymentId: null }),
+  };
+  // A state-shaped object over the records, as views.js reads it; requests as they were created.
+  const shape = {
+    currency: r.currency,
+    users: records.users,
+    paymentsById: records.payments,
+    requestsById: new Map([...records.requests].map(([id, q]) => [id, atCreation.request(q)])),
+  };
+  return {
+    payment: (p) => paymentView(shape, p),
+    request: (q) => requestView(shape, atCreation.request(q)),
+    split: (sp) => splitView(shape, sp),
+    settlement: (st) => settlementView(shape, st),
+  };
+}
+
 function checkReplays(r) {
   const index = (list) => new Map(list.map((x) => [x.id, x]));
-  const maps = {
-    payment: index(r.payments), request: index(r.requests), split: index(r.splits),
-    settlement: index(r.settlements),
+  const records = {
+    users: index(r.users), payments: index(r.payments), requests: index(r.requests),
+    splits: index(r.splits), settlements: index(r.settlements),
   };
-  const find = Object.fromEntries(Object.entries(maps).map(([kind, map]) => [kind, (id) => map.get(id)]));
-  const users = index(r.users);
+  const view = creationViews(r, records);
   r.idempotency.forEach((rec, i) => {
     const [userId, , route, params] = JSON.parse(rec.scope);
     const rule = REPLAY_RULES[route];
-    const ok = rule && rule({ userId, params, body: JSON.parse(rec.fingerprint), view: rec.response.body, find, users });
-    check(ok, `idempotency[${i}] does not describe the record it answered for`);
+    const ok = rule && rule({ userId, params, body: JSON.parse(rec.fingerprint), receipt: rec.response.body, records, view });
+    check(ok, `idempotency[${i}] is not the receipt the service gave for that write`);
   });
 }
