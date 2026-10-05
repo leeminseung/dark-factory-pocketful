@@ -326,3 +326,33 @@ def spawn():
     yield start
     for n in names:
         subprocess.run(["docker", "rm", "-f", n], capture_output=True)
+
+
+# ---- browser (stage 2 on) ----------------------------------------------------
+@pytest.fixture(scope="session")
+def _browser():
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        yield b
+        b.close()
+
+
+@pytest.fixture
+def new_page(_browser):
+    contexts = []
+
+    def make(width=1280, height=900):
+        ctx = _browser.new_context(base_url=BASE_URL, viewport={"width": width, "height": height})
+        ctx.set_default_timeout(int(os.environ.get("ACCEPTANCE_UI_TIMEOUT_MS", "8000")))
+        contexts.append(ctx)
+        return ctx.new_page()
+
+    yield make
+    for ctx in contexts:
+        ctx.close()
+
+
+@pytest.fixture
+def page(new_page):
+    return new_page()

@@ -35,7 +35,7 @@ total = covered = 0
 missing = []
 out = []
 for line in lines:
-    m = re.match(r"^\| (S\d+-\d+) \|", line)
+    m = re.match(rf"^\| (S{stage}-\d+) \|", line)
     if m:
         cells = [c.strip() for c in SPLIT.split(line)[1:-1]]
         rid = m.group(1)
@@ -48,6 +48,8 @@ for line in lines:
             cells[-2] = "<br>".join(sorted(set(covers[rid])))
             if status in ("open", "tested", ""):
                 cells[-1] = "tested"
+        elif cells[-2] and cells[-2] != "—":
+            covered += 1          # a hand-written Tests cell (e.g. a whole earlier suite)
         else:
             missing.append(rid)
         line = "| " + " | ".join(cells) + " |"

@@ -33,6 +33,11 @@ if [ ! -x "$VENV/bin/python" ]; then
     "$VENV/bin/pip" install -q -r "$HERE/requirements.txt"
   fi
 fi
+# keep dependencies current (playwright was added in stage 2) and make sure chromium is present
+"$VENV/bin/python" -c 'import playwright' 2>/dev/null || {
+  if command -v uv >/dev/null 2>&1; then uv pip install -q --python "$VENV/bin/python" -r "$HERE/requirements.txt";
+  else "$VENV/bin/pip" install -q -r "$HERE/requirements.txt"; fi; }
+"$VENV/bin/python" -m playwright install chromium >/dev/null 2>&1 || echo "warning: playwright chromium install failed"
 
 free_port() {
   "$VENV/bin/python" -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'
@@ -46,6 +51,8 @@ INNER_PORT=9137   # deliberately not 8080: proves PORT is honoured
 cleanup() {
   docker logs "$NAME" >"$OUT/service.log" 2>&1 || true
   docker rm -f "$NAME" >/dev/null 2>&1 || true
+  docker logs "$NAME-prev" >"$OUT/previous-service.log" 2>&1 || true
+  docker rm -f "$NAME-prev" >/dev/null 2>&1 || true
   local ids
   ids="$(docker ps -aq --filter "label=pocketful-acceptance=$RUN_ID")"
   [ -n "$ids" ] && docker rm -f $ids >/dev/null 2>&1 || true
@@ -81,6 +88,25 @@ PY
 ) || { echo "service never became healthy"; docker logs "$NAME" | tail -50; exit 1; }
 echo "healthy after ${START_SECONDS}s at $BASE_URL"
 
+# The previous stage's folder next to this one (stage-K -> stage-(K-1)), for upgrade tests.
+PREV_BASE_URL=""
+BASE_NAME="$(basename "$STAGE_DIR")"
+if [[ "$BASE_NAME" =~ ^stage-([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -gt 1 ]; then
+  PREV_DIR="$(dirname "$STAGE_DIR")/stage-$((BASH_REMATCH[1] - 1))"
+  if [ -d "$PREV_DIR" ]; then
+    docker build -q -t "$RUN_ID-prev:latest" "$PREV_DIR" >"$OUT/previous-build.log" 2>&1 || { cat "$OUT/previous-build.log"; echo "PREVIOUS BUILD FAILED"; exit 1; }
+    PREV_PORT="$(free_port)"
+    docker run -d --name "$NAME-prev" --label "pocketful-acceptance=$RUN_ID" \
+      --cpus 2 --memory 2g -e PORT="$INNER_PORT" -p "127.0.0.1:$PREV_PORT:$INNER_PORT" "$RUN_ID-prev:latest" >/dev/null
+    PREV_BASE_URL="http://127.0.0.1:$PREV_PORT"
+    for _ in $(seq 1 240); do
+      curl -fsS "$PREV_BASE_URL/health" >/dev/null 2>&1 && break
+      sleep 0.25
+    done
+    echo "previous stage $PREV_DIR at $PREV_BASE_URL"
+  fi
+fi
+
 DIRS=()
 for n in $(seq 1 "$SUITE"); do
   [ -d "$HERE/tests/stage_$n" ] && DIRS+=("$HERE/tests/stage_$n")
@@ -88,7 +114,7 @@ done
 
 set +e
 BASE_URL="$BASE_URL" IMAGE_TAG="$TAG" RUN_ID="$RUN_ID" START_SECONDS="$START_SECONDS" \
-STAGE_DIR="$STAGE_DIR" \
+STAGE_DIR="$STAGE_DIR" PREV_BASE_URL="$PREV_BASE_URL" \
   "$VENV/bin/python" -m pytest -p no:cacheprovider -q -rfE \
     --rootdir "$HERE/tests" -c "$HERE/pytest.ini" \
     --junitxml "$OUT/junit.xml" "${DIRS[@]}" "$@" 2>&1 | tee "$OUT/pytest.log"
