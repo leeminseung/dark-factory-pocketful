@@ -330,3 +330,23 @@ test('R13 S2-158 S1-158: a stage-2 export with its authorizations removed is not
   }
   assert.equal((await me(w.bob)).total, 3_000, 'nothing changed');
 });
+
+test('R16 S2-102 S1-158: imported times must agree: no record after the clock, and expires_at = created_at + ttl', async () => {
+  const w = await world(srv.base);
+  await w.ada.post('/payments', { to_handle: 'bob', amount: 1 }, newKey());
+  await authorize(w, 'ada', 'bob', 10);
+  const exported = (await call(srv.base, 'GET', '/_test/export')).body;
+  // Without stored replays, so only the time rules can refuse these states.
+  const good = { ...exported, state: { ...exported.state, idempotency: [] } };
+  const s = good.state;
+  const later = s.last_timestamp_ms + 60_000;
+  const bad = {
+    'a payment created after the clock': { ...good, state: { ...s, payments: s.payments.map((p) => ({ ...p, created_at_ms: later })) } },
+    'an authorization created after the clock': { ...good, state: { ...s, authorizations: s.authorizations.map((a) => ({ ...a, created_at_ms: later, expires_at_ms: later + 600_000 })) } },
+    'expires_at not created_at + ttl': { ...good, state: { ...s, authorizations: s.authorizations.map((a) => ({ ...a, expires_at_ms: a.created_at_ms - 1 })) } },
+  };
+  for (const [label, envelope] of Object.entries(bad)) {
+    expectError(await call(srv.base, 'POST', '/_test/import', { json: envelope }), 422, 'validation_failed', label);
+  }
+  assert.equal((await call(srv.base, 'POST', '/_test/import', { json: good })).status, 204);
+});

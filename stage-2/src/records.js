@@ -6,7 +6,7 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, isAuthorizationStatus, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, expiryOf, isAuthorizationStatus, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { formatTimestamp } from './clock.js';
@@ -136,9 +136,27 @@ export function checkRecords(r) {
   });
   requireUnique(r.authorizations.map((a) => a.id), 'authorization id');
 
+  checkTimes(r);
   checkLinks(r);
   checkHolds(r);
   checkReplays(r);
+}
+
+/**
+ * Times agree with the clock and the lifetime: the clock never runs backwards, so no record was
+ * created after last_timestamp_ms; an authorization created through the API expires exactly
+ * created_at + ttl (stage 2). Seeded ones carry their own expires_at, in the past or future.
+ */
+function checkTimes(r) {
+  const created = [
+    ...r.payments.map((p) => p.createdAt), ...r.requests.map((q) => q.createdAt), ...r.splits.map((sp) => sp.createdAt),
+    ...r.settlements.map((st) => st.committedAt), ...r.authorizations.map((a) => a.createdAt),
+  ];
+  check(created.every((t) => t <= r.lastTimestampMs), 'a record was created after the clock');
+  for (const a of r.authorizations) {
+    check(a.seeded || a.expiresAt === expiryOf(a.createdAt, r.authorizationTtlSeconds),
+      `authorization ${a.id} does not expire at created_at + authorization_ttl_seconds`);
+  }
 }
 
 /** §2 stage 2: no user's unexpired open holds may exceed their total (available never negative). */
