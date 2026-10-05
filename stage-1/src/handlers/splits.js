@@ -1,0 +1,64 @@
+// POST /splits (§8) and the equal-split rule (§9).
+import { invalid, malformed, notFound } from '../errors.js';
+import { amount, note } from '../validate.js';
+import { formatTimestamp } from '../clock.js';
+import { requestView } from '../views.js';
+import { addPendingRequest } from './requests.js';
+
+/** Whole units summing to `total`, differing by at most one; the first ones get the extra units. */
+export function equalShares(total, count) {
+  const base = Math.floor(total / count);
+  const remainder = total - base * count;
+  return Array.from({ length: count }, (_, i) => base + (i < remainder ? 1 : 0));
+}
+
+function participantHandles(body) {
+  if (!Object.prototype.hasOwnProperty.call(body, 'participant_handles')) {
+    throw invalid('participant_handles is required');
+  }
+  const handles = body.participant_handles;
+  if (!Array.isArray(handles) || !handles.every((h) => typeof h === 'string')) {
+    throw malformed('participant_handles must be an array of strings');
+  }
+  if (handles.length === 0) throw invalid('participant_handles is empty');
+  if (new Set(handles).size !== handles.length) throw invalid('participant_handles has a duplicate');
+  return handles;
+}
+
+/** Idempotent: returns the 201 body. No balance is checked. */
+export function createSplit({ state, user, body }) {
+  const total = amount(body);
+  const handles = participantHandles(body);
+  const text = note(body);
+  const participants = handles.map((handle) => {
+    const participant = state.userByHandle(handle);
+    if (!participant) throw notFound(`no user has the handle ${JSON.stringify(handle)}`);
+    return participant;
+  });
+  const shares = equalShares(total, participants.length);
+  const createdAt = state.nextTimestamp();
+  const requests = participants
+    .map((payer, i) => ({ payer, share: shares[i] }))
+    .filter(({ payer }) => payer.id !== user.id)
+    .map(({ payer, share }) =>
+      addPendingRequest(state, { requester: user, payer, amount: share, note: text, createdAt }));
+  const split = {
+    id: state.newId('sp', (id) => state.splits.some((s) => s.id === id)),
+    requester_id: user.id,
+    amount: total,
+    note: text,
+    shares: handles.map((handle, i) => ({ handle, amount: shares[i] })),
+    request_ids: requests.map((r) => r.id),
+    created_at_ms: createdAt,
+  };
+  state.splits.push(split);
+  return {
+    split_id: split.id,
+    amount: total,
+    currency: state.currency,
+    note: text,
+    shares: split.shares,
+    requests: requests.map((r) => requestView(state, r)),
+    created_at: formatTimestamp(createdAt),
+  };
+}
