@@ -212,3 +212,16 @@ test('a split and its replay survive export and import', async () => {
   const broken = { ...snapshot, state: { ...snapshot.state, splits: [{ ...snapshot.state.splits[0], request_ids: ['rq_none'] }] } };
   expectError(await importState(broken), 422, 'validation_failed');
 });
+
+test('R15 S1-025: link fields outside the fixture format are ignored by reset', async () => {
+  const w = await world(srv.base, fixture({
+    payments: [{ id: 'p_1', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 5, note: '', request_id: 7 }],
+    requests: [
+      { id: 'rq_1', requester_id: 'u_bob', payer_id: 'u_ada', amount: 5, note: '', status: 'pending', payment_id: 5 },
+      { id: 'rq_2', requester_id: 'u_bob', payer_id: 'u_ada', amount: 5, note: '', status: 'declined', payment_id: 'p_1' },
+    ],
+  }));
+  const listed = (await w.ada.get('/requests')).body.requests;
+  assert.deepEqual(listed.map((r) => [r.request_id, r.payment_id]), [['rq_2', null], ['rq_1', null]]);
+  assert.equal((await w.ada.get('/activity')).body.payments[0].request_id, null);
+});

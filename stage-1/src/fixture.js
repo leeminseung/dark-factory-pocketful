@@ -36,11 +36,6 @@ function readId(obj, name, where) {
   return id;
 }
 
-function readOptionalRef(obj, name, where) {
-  if (!has(obj, name) || obj[name] === null) return null;
-  return readId(obj, name, where);
-}
-
 function readUser(raw, where) {
   if (!isPlainObject(raw)) throw malformed(`${where} must be an object`);
   const user = {
@@ -70,7 +65,8 @@ function readPayment(raw, where, userIds) {
   return {
     id: readId(raw, 'id', where), fromUserId, toUserId,
     amount: amount(raw, 'amount', { min: 0 }), note: note(raw), visibility: visibility(raw),
-    requestId: readOptionalRef(raw, 'request_id', where), settlementId: null,
+    // The fixture format has no link fields (§4): seeded records start unlinked.
+    requestId: null, settlementId: null,
   };
 }
 
@@ -81,7 +77,7 @@ function readRequest(raw, where, userIds) {
   if (!isRequestStatus(status)) throw invalid(`${where}.status is invalid`);
   return {
     id: readId(raw, 'id', where), requesterId, payerId,
-    amount: amount(raw, 'amount', { min: 0 }), note: note(raw), status, paymentId: readOptionalRef(raw, 'payment_id', where),
+    amount: amount(raw, 'amount', { min: 0 }), note: note(raw), status, paymentId: null,
   };
 }
 
