@@ -11,7 +11,8 @@ test('GET /me shows the seeded user', async () => {
   const w = await world(srv.base);
   const me = await w.ada.get('/me');
   assert.deepEqual(me.body, {
-    user_id: 'u_ada', display_name: 'Ada', handle: 'ada', balance: 10_000, currency: 'EUR', minor_units: 2,
+    user_id: 'u_ada', display_name: 'Ada', handle: 'ada', balance: 10_000,
+    total: 10_000, available: 10_000, held: 0, currency: 'EUR', minor_units: 2,
   });
 });
 

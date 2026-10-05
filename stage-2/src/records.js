@@ -6,7 +6,7 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, isBalance, isEmail, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, isAuthorizationStatus, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { State } from './state.js';
@@ -19,11 +19,16 @@ import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
  *   users:        { id, email, displayName, handle, balance }   (+ passwordHash once hashed)
  *   operatorIds:  [userId]
  *   tokens:       [{ token, userId }]
- *   payments:     { id, fromUserId, toUserId, amount, note, visibility, requestId, settlementId, createdAt }
+ *   authorizationTtlSeconds
+ *   payments:     { id, fromUserId, toUserId, amount, note, visibility, requestId, settlementId,
+ *                   authorizationId, createdAt }
  *   requests:     { id, requesterId, payerId, amount, note, status, paymentId, seeded, createdAt }
  *                 (seeded: came from a fixture, which may say `paid` without naming a payment)
  *   splits:       { id, requesterId, amount, note, shares: [{ handle, amount }], requestIds, createdAt }
  *   settlements:  { id, committedAt, paymentIds }
+ *   authorizations: { id, fromUserId, toUserId, amount, capturedAmount, note, visibility, status,
+ *                   expiresAt, paymentIds, seeded, createdAt }
+ *                 (seeded: came from a fixture, whose `captured` ones name no payment)
  *   idempotency:  [{ scope, fingerprint, response }]
  */
 
@@ -43,6 +48,7 @@ export function checkRecords(r) {
   check(typeof r.currency === 'string' && r.currency !== '', 'currency must be a non-empty string');
   check(isMinorUnits(r.minorUnits), 'minor_units must be 0, 2 or 3');
   check(isTimestampMs(r.lastTimestampMs), 'last timestamp is invalid');
+  check(isTtlSeconds(r.authorizationTtlSeconds), 'authorization_ttl_seconds must be a positive whole number of seconds');
 
   r.users.forEach((u, i) => {
     check(isId(u.id), `users[${i}].id must be 1 to 64 characters`);
@@ -70,7 +76,8 @@ export function checkRecords(r) {
     check(isRecordAmount(p.amount), `${at}.amount is out of range`);
     check(isNote(p.note), `${at}.note is invalid`);
     check(isVisibility(p.visibility), `${at}.visibility is invalid`);
-    check(isOptionalId(p.requestId) && isOptionalId(p.settlementId), `${at} links are invalid`);
+    check(isOptionalId(p.requestId) && isOptionalId(p.settlementId) && isOptionalId(p.authorizationId),
+      `${at} links are invalid`);
     check(isTimestampMs(p.createdAt), `${at} timestamp is invalid`);
   });
   requireUnique(r.payments.map((p) => p.id), 'payment id');
@@ -113,7 +120,37 @@ export function checkRecords(r) {
   });
   requireUnique(r.idempotency.map((rec) => rec.scope), 'idempotency scope');
 
+  r.authorizations.forEach((a, i) => {
+    const at = `authorizations[${i}]`;
+    check(isId(a.id), `${at}.id must be 1 to 64 characters`);
+    parties(a.fromUserId, a.toUserId, at);
+    check(isRecordAmount(a.amount) && a.amount >= 1, `${at}.amount is out of range`);
+    check(isRecordAmount(a.capturedAmount) && a.capturedAmount <= a.amount, `${at}.captured amount is out of range`);
+    check(isNote(a.note), `${at}.note is invalid`);
+    check(isVisibility(a.visibility), `${at}.visibility is invalid`);
+    check(isAuthorizationStatus(a.status), `${at}.status is invalid`);
+    check(isTimestampMs(a.expiresAt) && isTimestampMs(a.createdAt), `${at} timestamps are invalid`);
+    check(isList(a.paymentIds, (id) => paymentIds.has(id)), `${at}.payment_ids are invalid`);
+    check(typeof a.seeded === 'boolean', `${at}.seeded must be a boolean`);
+  });
+  requireUnique(r.authorizations.map((a) => a.id), 'authorization id');
+
   checkLinks(r);
+  checkHolds(r);
+}
+
+/** §2 stage 2: no user's unexpired open holds may exceed their total (available never negative). */
+function checkHolds(r) {
+  const now = Date.now();
+  const held = new Map();
+  for (const a of r.authorizations) {
+    if (a.status === 'open' && a.expiresAt > now) {
+      held.set(a.fromUserId, (held.get(a.fromUserId) ?? 0) + a.amount - a.capturedAmount);
+    }
+  }
+  for (const u of r.users) {
+    check((held.get(u.id) ?? 0) <= u.balance, `holds on ${u.id} exceed its balance`);
+  }
 }
 
 /** JSON text of an object, already in the canonical form runIdempotent writes. */
@@ -159,7 +196,13 @@ function checkLinks(r) {
   const requests = new Map(r.requests.map((q) => [q.id, q]));
   const settlements = new Map(r.settlements.map((st) => [st.id, st]));
 
+  const authorizations = new Map(r.authorizations.map((a) => [a.id, a]));
   for (const p of r.payments) {
+    if (p.authorizationId !== null) {
+      const a = authorizations.get(p.authorizationId);
+      check(a && a.paymentIds.includes(p.id) && a.fromUserId === p.fromUserId && a.toUserId === p.toUserId
+        && p.requestId === null && p.settlementId === null, `payment ${p.id} names an authorization it did not capture`);
+    }
     if (p.requestId !== null) {
       const q = requests.get(p.requestId);
       check(q && q.status === 'paid' && q.paymentId === p.id && q.payerId === p.fromUserId
@@ -178,6 +221,17 @@ function checkLinks(r) {
     } else {
       check(q.status !== 'paid' || q.seeded, `request ${q.id} is paid but names no payment`);
     }
+  }
+  for (const a of r.authorizations) {
+    const captures = a.paymentIds.map((id) => payments.get(id));
+    const sum = captures.reduce((total, p) => total + p.amount, 0);
+    const unrecorded = a.seeded && captures.length === 0; // a fixture's captured one names no payment
+    check(new Set(a.paymentIds).size === a.paymentIds.length
+      && captures.every((p) => p.authorizationId === a.id)
+      && (unrecorded || sum === a.capturedAmount),
+      `authorization ${a.id} captures do not match its payments`);
+    check(a.status !== 'open' || a.capturedAmount < a.amount, `authorization ${a.id} is open with nothing left`);
+    check(a.status !== 'captured' || unrecorded || captures.length > 0, `authorization ${a.id} is captured without a payment`);
   }
   for (const st of r.settlements) {
     check(st.paymentIds.length > 0 && new Set(st.paymentIds).size === st.paymentIds.length
@@ -201,7 +255,9 @@ function checkLinks(r) {
 
 /** Builds a State from records that passed checkRecords; every user must have a passwordHash. */
 export function stateFromRecords(r) {
-  const state = new State({ currency: r.currency, minorUnits: r.minorUnits });
+  const state = new State({
+    currency: r.currency, minorUnits: r.minorUnits, authorizationTtlSeconds: r.authorizationTtlSeconds,
+  });
   state.lastTimestampMs = r.lastTimestampMs;
   for (const u of r.users) {
     state.addUser({
@@ -214,6 +270,7 @@ export function stateFromRecords(r) {
   for (const payment of r.payments) state.addPayment({ ...payment });
   for (const request of r.requests) state.addRequest({ ...request });
   for (const split of r.splits) state.addSplit({ ...split });
+  for (const a of r.authorizations) state.addAuthorization({ ...a, paymentIds: [...a.paymentIds] });
   for (const settlement of r.settlements) state.addSettlement({ ...settlement });
   for (const { scope, fingerprint, response } of r.idempotency) {
     state.saveIdempotencyRecord(scope, { fingerprint, response });

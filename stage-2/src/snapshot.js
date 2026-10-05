@@ -5,6 +5,7 @@
 // the same rules reset uses, so a defective snapshot is 422 and the live state stays as it was.
 import { invalid } from './errors.js';
 import { isPasswordHash } from './passwords.js';
+import { DEFAULT_AUTHORIZATION_TTL_SECONDS } from './model.js';
 import { checkRecords, stateFromRecords } from './records.js';
 import { isPlainObject } from './validate.js';
 
@@ -17,6 +18,7 @@ export function exportState(state) {
     currency: state.currency,
     minor_units: state.minorUnits,
     last_timestamp_ms: state.lastTimestampMs,
+    authorization_ttl_seconds: state.authorizationTtlSeconds,
     users: [...state.users.values()].map((u) => ({
       id: u.id, email: u.email, password_hash: u.passwordHash, display_name: u.displayName,
       handle: u.handle, balance: u.balance,
@@ -26,7 +28,12 @@ export function exportState(state) {
     payments: state.payments.map((p) => ({
       id: p.id, from_user_id: p.fromUserId, to_user_id: p.toUserId, amount: p.amount,
       note: p.note, visibility: p.visibility, request_id: p.requestId,
-      settlement_id: p.settlementId, created_at_ms: p.createdAt,
+      settlement_id: p.settlementId, authorization_id: p.authorizationId, created_at_ms: p.createdAt,
+    })),
+    authorizations: state.authorizations.map((a) => ({
+      id: a.id, from_user_id: a.fromUserId, to_user_id: a.toUserId, amount: a.amount,
+      captured_amount: a.capturedAmount, note: a.note, visibility: a.visibility, status: a.status,
+      expires_at_ms: a.expiresAt, payment_ids: a.paymentIds, seeded: a.seeded, created_at_ms: a.createdAt,
     })),
     requests: state.requests.map((r) => ({
       id: r.id, requester_id: r.requesterId, payer_id: r.payerId, amount: r.amount,
@@ -65,10 +72,15 @@ export function importState(envelope) {
   users.forEach((u, i) => {
     if (!isPasswordHash(u.password_hash)) throw invalid(`invalid state: users[${i}].password_hash`);
   });
+  // A stage-1 export has no authorizations: it imports as a state with none, the default
+  // lifetime, and payments that came from no authorization (stage 2 "Existing clients after an
+  // upgrade"). A stage-2 export must carry every stage-2 field.
+  const fromStage1 = !Object.prototype.hasOwnProperty.call(s, 'authorizations');
   const records = {
     currency: s.currency,
     minorUnits: s.minor_units,
     lastTimestampMs: s.last_timestamp_ms,
+    authorizationTtlSeconds: fromStage1 ? DEFAULT_AUTHORIZATION_TTL_SECONDS : s.authorization_ttl_seconds,
     users: users.map((u) => ({
       id: u.id, email: u.email, passwordHash: u.password_hash, displayName: u.display_name,
       handle: u.handle, balance: u.balance,
@@ -78,7 +90,13 @@ export function importState(envelope) {
     payments: list(s, 'payments').map((p) => ({
       id: p.id, fromUserId: p.from_user_id, toUserId: p.to_user_id, amount: p.amount,
       note: p.note, visibility: p.visibility, requestId: p.request_id,
-      settlementId: p.settlement_id, createdAt: p.created_at_ms,
+      settlementId: p.settlement_id, authorizationId: fromStage1 ? null : p.authorization_id,
+      createdAt: p.created_at_ms,
+    })),
+    authorizations: fromStage1 ? [] : list(s, 'authorizations').map((a) => ({
+      id: a.id, fromUserId: a.from_user_id, toUserId: a.to_user_id, amount: a.amount,
+      capturedAmount: a.captured_amount, note: a.note, visibility: a.visibility, status: a.status,
+      expiresAt: a.expires_at_ms, paymentIds: a.payment_ids, seeded: a.seeded, createdAt: a.created_at_ms,
     })),
     requests: list(s, 'requests').map((r) => ({
       id: r.id, requesterId: r.requester_id, payerId: r.payer_id, amount: r.amount,

@@ -75,6 +75,9 @@ async function dispatch(req) {
   // One state for the whole request: a concurrent reset or import swaps in a new one
   // without changing the state this request reads and writes.
   const state = store.current;
+  // Expiry needs no request at the deadline: every request first closes what is due, so
+  // all its reads and writes see the clock (stage 2 "Reads and writes must reflect expiry").
+  state.expireDue(Date.now());
   const user = route.auth ? authenticate(state, req.headers.authorization) : null;
   if (route.operator && !state.isOperator(user.id)) throw forbidden('settlement operators only');
   const key = route.idempotent ? idempotencyKey(utf8Header(req.headers['idempotency-key'])) : null;

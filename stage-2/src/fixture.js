@@ -6,6 +6,8 @@
 // anything is built, so a rejected fixture changes nothing.
 import { invalid, malformed } from './errors.js';
 import { hashSeededPasswords } from './passwords.js';
+import { parseTimestamp } from './clock.js';
+import { DEFAULT_AUTHORIZATION_TTL_SECONDS } from './model.js';
 import { checkRecords, stateFromRecords } from './records.js';
 import { isPlainObject } from './validate.js';
 
@@ -54,6 +56,7 @@ const readPayment = (raw, where, createdAt) => ({
   visibility: read(raw, 'visibility', 'any', where, 'public'),
   requestId: null,
   settlementId: null,
+  authorizationId: null,
   createdAt,
 });
 
@@ -69,6 +72,28 @@ const readRequest = (raw, where, createdAt) => ({
   createdAt,
 });
 
+/** A seeded authorization holds from its own absolute expires_at; a seeded `captured` one counts as fully captured. */
+function readAuthorization(raw, where, createdAt) {
+  const expiresAt = parseTimestamp(read(object(raw, where), 'expires_at', 'string', where));
+  if (expiresAt === null) throw invalid(`${where}.expires_at is not an RFC 3339 timestamp with an offset`);
+  const amount = read(raw, 'amount', 'any', where);
+  const status = read(raw, 'status', 'any', where, 'open');
+  return {
+    id: read(raw, 'id', 'string', where),
+    fromUserId: read(raw, 'from_user_id', 'string', where),
+    toUserId: read(raw, 'to_user_id', 'string', where),
+    amount,
+    capturedAmount: status === 'captured' ? amount : 0,
+    note: read(raw, 'note', 'any', where, ''),
+    visibility: read(raw, 'visibility', 'any', where, 'public'),
+    status,
+    expiresAt,
+    paymentIds: [],
+    seeded: true,
+    createdAt,
+  };
+}
+
 /** Reads and judges a fixture; returns its records, users still holding plaintext passwords. */
 export function parseFixture(body) {
   // Seeded payments and requests all get the reset time; a later entry counts as newer.
@@ -81,6 +106,7 @@ export function parseFixture(body) {
     currency: read(body, 'currency', 'string', 'fixture'),
     minorUnits: read(body, 'minor_units', 'number', 'fixture'),
     lastTimestampMs: now,
+    authorizationTtlSeconds: read(body, 'authorization_ttl_seconds', 'any', 'fixture', DEFAULT_AUTHORIZATION_TTL_SECONDS),
     users: read(body, 'users', 'array', 'fixture').map((u, i) => readUser(u, `users[${i}]`)),
     operatorIds,
     tokens: [],
@@ -88,6 +114,8 @@ export function parseFixture(body) {
     requests: read(body, 'requests', 'array', 'fixture', []).map((r, i) => readRequest(r, `requests[${i}]`, now)),
     splits: [],
     settlements: [],
+    authorizations: read(body, 'authorizations', 'array', 'fixture', [])
+      .map((a, i) => readAuthorization(a, `authorizations[${i}]`, now)),
     idempotency: [],
   };
   checkRecords(records);

@@ -5,6 +5,9 @@
 //   noBody:     the endpoint defines no request body: none or an empty one is fine, but a body
 //               that is sent must still parse as a JSON object (§5, ruling R3)
 import { login, me, signup } from './handlers/auth.js';
+import {
+  captureAuthorization, createAuthorization, listAuthorizations, voidAuthorization,
+} from './handlers/authorizations.js';
 import { activity, createPayment } from './handlers/payments.js';
 import {
   cancelRequest, createRequest, declineRequest, listRequests, payRequest,
@@ -43,6 +46,16 @@ export const routes = defineRoutes([
   { method: 'POST', path: '/requests/:id/decline', handler: declineRequest, auth: true, noBody: true },
   { method: 'POST', path: '/requests/:id/cancel', handler: cancelRequest, auth: true, noBody: true },
   { method: 'POST', path: '/splits', handler: createSplit, auth: true, idempotent: true },
+  { method: 'POST', path: '/authorizations', handler: createAuthorization, auth: true, idempotent: true },
+  { method: 'GET', path: '/authorizations', handler: listAuthorizations, auth: true },
+  {
+    method: 'POST', path: '/authorizations/:id/capture', handler: captureAuthorization,
+    auth: true, idempotent: true,
+  },
+  {
+    method: 'POST', path: '/authorizations/:id/void', handler: voidAuthorization,
+    auth: true, noBody: true,
+  },
   {
     method: 'POST', path: '/settlements', handler: createSettlement,
     auth: true, operator: true, idempotent: true,

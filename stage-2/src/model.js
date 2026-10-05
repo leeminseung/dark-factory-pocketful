@@ -1,5 +1,5 @@
 // The model's rules (§3.4, §4, §6, §8, §9): what a valid id, email, handle, amount, note,
-// visibility, status and balance is. Every reader of outside data — API bodies
+// visibility, status, balance and authorization is. Every reader of outside data — API bodies
 // (validate.js), reset fixtures (fixture.js) and imported state (snapshot.js) — asks here.
 
 export const MAX_ID_CHARS = 64;
@@ -14,6 +14,9 @@ export const REQUEST_STATUSES = ['pending', 'paid', 'declined', 'cancelled'];
 /** A request leaves `pending` once, for exactly one of these (§4). */
 export const TERMINAL_STATUSES = REQUEST_STATUSES.filter((status) => status !== 'pending');
 export const MINOR_UNITS = [0, 2, 3];
+/** Stage 2: an authorization is open, then exactly one of captured, voided or expired. */
+export const AUTHORIZATION_STATUSES = ['open', 'captured', 'voided', 'expired'];
+export const DEFAULT_AUTHORIZATION_TTL_SECONDS = 600;
 /** The last instant with an RFC 3339 form (§3.4): 9999-12-31T23:59:59.999Z, as epoch ms. */
 export const MAX_TIMESTAMP_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
 
@@ -37,6 +40,9 @@ export const isVisibility = (value) => VISIBILITIES.includes(value);
 export const isRequestStatus = (value) => REQUEST_STATUSES.includes(value);
 /** A stored time in epoch ms that formats as RFC 3339: 1970 to the end of year 9999. */
 export const isTimestampMs = (value) => isIntegerIn(value, 0, MAX_TIMESTAMP_MS);
+export const isAuthorizationStatus = (value) => AUTHORIZATION_STATUSES.includes(value);
+/** A lifetime for new authorizations: a positive whole number of seconds whose expiry stays formattable. */
+export const isTtlSeconds = (value) => isIntegerIn(value, 1, Math.floor(MAX_TIMESTAMP_MS / 1000));
 export const isMinorUnits = (value) => MINOR_UNITS.includes(value);
 export const isTotalWithinLimit = (balances) =>
   balances.reduce((sum, balance) => sum + balance, 0) <= BALANCE_LIMIT;

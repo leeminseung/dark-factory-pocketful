@@ -16,6 +16,7 @@ export function paymentView(state, payment) {
     visibility: payment.visibility,
     request_id: payment.requestId,
     settlement_id: payment.settlementId,
+    authorization_id: payment.authorizationId,
     created_at: formatTimestamp(payment.createdAt),
   };
 }
@@ -44,6 +45,9 @@ export function meView(state, user) {
     display_name: user.displayName,
     handle: user.handle,
     balance: user.balance,
+    total: user.balance,
+    available: state.availableOf(user.id),
+    held: state.heldBy(user.id),
     currency: state.currency,
     minor_units: state.minorUnits,
   };
@@ -68,6 +72,29 @@ export function settlementView(state, settlement) {
     settlement_id: settlement.id,
     committed_at: formatTimestamp(settlement.committedAt),
     payments: settlement.paymentIds.map((id) => paymentView(state, state.paymentsById.get(id))),
+  };
+}
+
+export function authorizationView(state, authorization) {
+  const from = state.users.get(authorization.fromUserId);
+  const to = state.users.get(authorization.toUserId);
+  return {
+    authorization_id: authorization.id,
+    from_user_id: from.id,
+    from_handle: from.handle,
+    to_user_id: to.id,
+    to_handle: to.handle,
+    amount: authorization.amount,
+    captured_amount: authorization.capturedAmount,
+    remaining_amount: state.remainingOf(authorization),
+    currency: state.currency,
+    note: authorization.note,
+    visibility: authorization.visibility,
+    status: authorization.status,
+    expires_at: formatTimestamp(authorization.expiresAt),
+    payment_id: authorization.paymentIds.at(-1) ?? null,
+    payment_ids: [...authorization.paymentIds],
+    created_at: formatTimestamp(authorization.createdAt),
   };
 }
 

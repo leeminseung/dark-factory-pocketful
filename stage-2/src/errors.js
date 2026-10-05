@@ -27,4 +27,10 @@ export const handleTaken = () => new ApiError(409, 'handle_taken', 'derived hand
 export const invalid = (message = 'validation failed') =>
   new ApiError(422, 'validation_failed', message);
 export const selfPayment = () => new ApiError(422, 'self_payment', 'cannot pay yourself');
+export const authorizationNotOpen = () =>
+  new ApiError(409, 'authorization_not_open', 'the authorization is not open');
+export const authorizationExpired = () =>
+  new ApiError(409, 'authorization_expired', 'the authorization has expired');
+export const captureExceedsAuthorization = () =>
+  new ApiError(422, 'capture_exceeds_authorization', 'amount is above the uncaptured remainder');
 export const selfRequest = () => new ApiError(422, 'self_request', 'cannot request from yourself');

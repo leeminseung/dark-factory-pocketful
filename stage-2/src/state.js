@@ -5,14 +5,24 @@
 // Every balance change goes through `movePayments`, which checks the §1 invariants for
 // the whole batch before it applies any of it, and every request status change goes
 // through `closeRequest`, so a request leaves `pending` once and moves money at most once.
+//
+// Stage 2 holds: an open authorization reserves its remaining amount on the payer's wallet.
+// `available = total − held` must never be negative, so the two ways it can fall — money
+// leaving (movePayments) and a new hold (openAuthorization) — both check `availableOf`.
+// Authorization status changes go through `setAuthorizationStatus`, which keeps the set of
+// open (holding) authorizations exact; `expireDue` closes those whose time has come.
 import { randomBytes } from 'node:crypto';
-import { insufficientFunds, requestNotPending } from './errors.js';
-import { TERMINAL_STATUSES } from './model.js';
+import {
+  authorizationExpired, authorizationNotOpen, captureExceedsAuthorization, insufficientFunds,
+  requestNotPending,
+} from './errors.js';
+import { DEFAULT_AUTHORIZATION_TTL_SECONDS, TERMINAL_STATUSES } from './model.js';
 
 export class State {
-  constructor({ currency, minorUnits }) {
+  constructor({ currency, minorUnits, authorizationTtlSeconds = DEFAULT_AUTHORIZATION_TTL_SECONDS }) {
     this.currency = currency;
     this.minorUnits = minorUnits;
+    this.authorizationTtlSeconds = authorizationTtlSeconds;
     this.users = new Map(); // id -> user
     this.userIdByEmail = new Map(); // lowercased email -> id
     this.userIdByHandle = new Map(); // handle -> id
@@ -24,6 +34,9 @@ export class State {
     this.requestsById = new Map();
     this.splits = new Map(); // id -> split
     this.settlements = new Map(); // id -> settlement
+    this.authorizations = []; // creation order, oldest first
+    this.authorizationsById = new Map();
+    this.openAuthorizations = new Set(); // the authorizations that hold funds
     this.idempotency = new Map(); // scope -> { fingerprint, response }
     this.lastTimestampMs = 0;
     this.journal = null; // undo steps of the running transaction, newest last
@@ -115,15 +128,14 @@ export class State {
    * so no wallet passes through a negative value. No wallet can exceed 2^53: balances are
    * never negative and the fixture's total is capped there (fixture.js).
    */
-  movePayments(transfers, { requestId = null, settlementId = null, createdAt }) {
+  movePayments(transfers, { requestId = null, settlementId = null, authorizationId = null, createdAt }) {
     const net = new Map();
     for (const t of transfers) {
       net.set(t.fromUserId, (net.get(t.fromUserId) ?? 0) - t.amount);
       net.set(t.toUserId, (net.get(t.toUserId) ?? 0) + t.amount);
     }
     for (const [userId, delta] of net) {
-      const after = this.users.get(userId).balance + delta;
-      if (after < 0) throw insufficientFunds();
+      if (this.availableOf(userId) + delta < 0) throw insufficientFunds();
     }
     for (const [userId, delta] of net) {
       const user = this.users.get(userId);
@@ -141,6 +153,7 @@ export class State {
         visibility: t.visibility,
         requestId,
         settlementId,
+        authorizationId,
         createdAt,
       };
       this.addPayment(payment);
@@ -174,6 +187,113 @@ export class State {
     request.status = 'paid';
     request.paymentId = payment.id;
     return payment;
+  }
+
+  // ---- holds and authorizations ----------------------------------------
+
+  /** The amount an authorization still holds: zero once it is closed. */
+  remainingOf(authorization) {
+    return authorization.status === 'open' ? authorization.amount - authorization.capturedAmount : 0;
+  }
+
+  /** The sum of the user's open holds. */
+  heldBy(userId) {
+    let held = 0;
+    for (const a of this.openAuthorizations) if (a.fromUserId === userId) held += this.remainingOf(a);
+    return held;
+  }
+
+  /** What the user can spend: total − held. */
+  availableOf(userId) {
+    return this.users.get(userId).balance - this.heldBy(userId);
+  }
+
+  /** Closes every open authorization whose expires_at is at or before `now`, releasing its remainder. */
+  expireDue(now) {
+    for (const a of this.openAuthorizations) {
+      if (a.expiresAt <= now) this.setAuthorizationStatus(a, 'expired');
+    }
+  }
+
+  /** The one place an authorization's status changes; keeps the set of holds in step. */
+  setAuthorizationStatus(authorization, status) {
+    const before = authorization.status;
+    this.remember(() => {
+      authorization.status = before;
+      if (before === 'open') this.openAuthorizations.add(authorization);
+    });
+    authorization.status = status;
+    if (status === 'open') this.openAuthorizations.add(authorization);
+    else this.openAuthorizations.delete(authorization);
+  }
+
+  /** Places a hold of `amount` on the payer; refused when it exceeds what they can spend. */
+  openAuthorization({ fromUserId, toUserId, amount, note, visibility }) {
+    if (this.availableOf(fromUserId) < amount) throw insufficientFunds();
+    const createdAt = this.nextTimestamp();
+    const authorization = {
+      id: this.newId('a', (id) => this.authorizationsById.has(id)),
+      fromUserId, toUserId, amount, note, visibility,
+      capturedAmount: 0,
+      status: 'open',
+      expiresAt: createdAt + this.authorizationTtlSeconds * 1000,
+      paymentIds: [],
+      seeded: false,
+      createdAt,
+    };
+    this.addAuthorization(authorization);
+    return authorization;
+  }
+
+  /** Refuses any move out of a closed authorization: expired first, then any other closed state. */
+  requireOpen(authorization) {
+    if (authorization.status === 'expired') throw authorizationExpired();
+    if (authorization.status !== 'open') throw authorizationNotOpen();
+  }
+
+  /**
+   * Captures `amount` (default: the remainder) as a payment from payer to receiver. A final
+   * capture, or one that takes the whole remainder, closes the authorization and releases
+   * what is left in the same step; otherwise the remainder stays held.
+   */
+  captureAuthorization(authorization, { amount = null, final = true }) {
+    this.requireOpen(authorization);
+    const remaining = this.remainingOf(authorization);
+    const captured = amount ?? remaining;
+    if (captured > remaining) throw captureExceedsAuthorization();
+    const before = { capturedAmount: authorization.capturedAmount, paymentIds: authorization.paymentIds };
+    this.remember(() => Object.assign(authorization, before));
+    authorization.capturedAmount += captured;
+    authorization.paymentIds = [...authorization.paymentIds];
+    if (final || captured === remaining) this.setAuthorizationStatus(authorization, 'captured');
+    // The hold no longer covers the captured part, so the payer's available is unchanged by it.
+    const [payment] = this.movePayments([{
+      fromUserId: authorization.fromUserId,
+      toUserId: authorization.toUserId,
+      amount: captured,
+      note: authorization.note,
+      visibility: authorization.visibility,
+    }], { authorizationId: authorization.id, createdAt: this.nextTimestamp() });
+    authorization.paymentIds.push(payment.id);
+    return payment;
+  }
+
+  /** Releases the remainder. Voiding a voided authorization is a no-op; captured or expired is 409. */
+  voidAuthorization(authorization) {
+    if (authorization.status === 'voided') return;
+    if (authorization.status !== 'open') throw authorizationNotOpen();
+    this.setAuthorizationStatus(authorization, 'voided');
+  }
+
+  addAuthorization(authorization) {
+    this.authorizations.push(authorization);
+    this.authorizationsById.set(authorization.id, authorization);
+    if (authorization.status === 'open') this.openAuthorizations.add(authorization);
+    this.remember(() => {
+      this.authorizations.pop();
+      this.authorizationsById.delete(authorization.id);
+      this.openAuthorizations.delete(authorization);
+    });
   }
 
   addPayment(payment) {
