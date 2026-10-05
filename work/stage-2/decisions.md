@@ -38,6 +38,10 @@
   R8 history; R2 -> R10/R11. Sent R10-R23 + D12 to implementer; rounds continue from 3 without reviewer, compared with 7.
 - Round 3 started: product 61246ed (stage folders = 7c61450; stage-1/ changed in 3c0ba8f for R14 — carried-forward
   defect fixed in every stage folder that carries it), suite ba66344 on stage-1 and stage-2; touched screens + D12.
+- Round 3: product 61246ed, suite ba66344: stage-2 858/858, stage-1 554/554; screens pass, 0 blocking
+  (work/reviews/design-61246ed.md). Probes fail S1-158 + S2-158 (F2: edited receipt fields — request status, split/
+  authorization note, authorization status — import with 204; work/reviews/acceptance-61246ed.md). Count 2 vs 7 at
+  rejection -> fell; round 4 with F2.
 
 ## Rulings
 - R1 (round 1, pay form changed and changed back after a confirmed payment replays it): BLOCKING. Text: "Submitting it
@@ -53,6 +57,8 @@
   clock) must be limited by constants chosen so that latest-possible created_at + largest TTL <= 9999-12-31T23:59:59.999Z.
   Reset and import refuse values above the constants with 422 validation_failed (a stated rule — §3.4 — would be
   violated); the bound never depends on the current time; expires_at is never clamped. Constants recorded in notes.md.
+  Correction (round 3, test-designer): the clock constant is 9899-12-30T23:59:59.999Z, not 9899-12-31 — 9900 is not a
+  leap year, so 9899-12-31 + 3155760000 s lands on 10000-01-01. The service's bound (9899-12-30) is right.
 
 ## Acceptance
 
