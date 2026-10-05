@@ -21,8 +21,16 @@
 - List complete at 190 rows (S1-187..S1-190 added in 2ef3db0); suite at 94de59b (553 tests).
 
 ## Rounds
+- Round 1: product 09c3a2d (stage-1 = bf9d8e6), suite 94de59b. Acceptance 553/553 (work/reviews/acceptance-09c3a2d.md);
+  round-1 review work/reviews/review-09c3a2d-round1.md (standards + spec briefs and raw files present). Failing ids: 0;
+  reviewer blocking: R1. Decision: another round; sent R1 (blocking) and R2, R3, R5-R10 (non-blocking) to implementer; R4 ruled no change.
 
 ## Rulings
+- R4 (pay with no body is 400): no change. §5: "400 | `malformed_request` | Unparseable body"; §7: the key is resolved
+  "After the body has parsed as a JSON object". An empty body does not parse; §8's "optional, default `\"public\"`" qualifies
+  the `visibility` field, not the body. Consistent with S1-059/S1-189 tests; supplied checks always send `{}` to pay.
+- R3 (decline/cancel accept an unparseable body): §5 "Unparseable body" -> 400 applies to any non-empty body that does
+  not parse; an absent/empty body stays 200 (§8 defines no body; supplied test_sample.py posts decline/cancel with none).
 
 ## Acceptance
 
