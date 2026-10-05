@@ -169,3 +169,32 @@ test('an operator id from import keeps its permission', async () => {
   const bob = client(srv.base, login.body.token);
   assert.equal((await bob.post('/settlements', { transfers: [{ from_handle: 'ada', to_handle: 'cy', amount: 1 }] }, newKey())).status, 201);
 });
+
+test('R1 S1-158: an import that breaks a model rule reset enforces is 422 and changes nothing', async () => {
+  const w = await world(srv.base, fixture({
+    payments: [{ id: 'p_1', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 5, note: 'n' }],
+    requests: [{ id: 'rq_1', requester_id: 'u_bob', payer_id: 'u_ada', amount: 5, note: 'n', status: 'pending' }],
+  }));
+  const good = await exportState();
+  const long = 'u'.repeat(100);
+  const s = good.state;
+  const withUser = (over) => ({ ...good, state: { ...s, users: [{ ...s.users[0], ...over }, ...s.users.slice(1)] } });
+  const withPayment = (over) => ({ ...good, state: { ...s, payments: [{ ...s.payments[0], ...over }] } });
+  const withRequest = (over) => ({ ...good, state: { ...s, requests: [{ ...s.requests[0], ...over }] } });
+  const bad = {
+    'user id over 64 characters': withUser({ id: long }),
+    'empty user id': withUser({ id: '' }),
+    'email not local@domain': withUser({ email: 'x' }),
+    'payment id over 64 characters': withPayment({ id: 'p'.repeat(65) }),
+    'payment note over 200 characters': withPayment({ note: 'x'.repeat(201) }),
+    'payment to itself': withPayment({ to_user_id: 'u_ada' }),
+    'request id empty': withRequest({ id: '' }),
+    'request note over 200 characters': withRequest({ note: 'x'.repeat(201) }),
+    'request from itself': withRequest({ payer_id: 'u_bob' }),
+  };
+  for (const [label, envelope] of Object.entries(bad)) {
+    expectError(await importState(envelope), 422, 'validation_failed', label);
+  }
+  assert.equal(await w.ada.balance(), 10_000);
+  assert.equal((await importState(good)).status, 204, 'the unchanged export is still accepted');
+});
