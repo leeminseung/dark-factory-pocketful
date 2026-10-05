@@ -21,6 +21,8 @@
   stage-1 + 304 stage-2). Command `work/acceptance/run.sh stage-2 2`. Validity check recorded in the list.
 
 ## Rounds
+- Round 1 started: product 7364e79 (stage-2 = 65a2726); suite 47edfcf (test-designer to fix the `auths` fixture setup
+  that over-authorizes bob, 4 setup errors); acceptance check, full screen review, reviewer round-1 review requested.
 
 ## Rulings
 
