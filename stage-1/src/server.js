@@ -23,13 +23,24 @@ function readBody(req) {
       }
       chunks.push(chunk);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
 
-/** A POST body must be a JSON object; an empty body does not parse (§5 malformed_request). */
-function parseBody(text) {
+const UTF8 = new TextDecoder('utf-8', { fatal: true });
+
+/**
+ * A POST body must be UTF-8 JSON text of an object (§3.4); an empty body, invalid UTF-8
+ * or anything else that does not parse is 400 malformed_request (§5).
+ */
+function parseBody(bytes) {
+  let text;
+  try {
+    text = UTF8.decode(bytes);
+  } catch {
+    throw malformed('request body is not valid UTF-8');
+  }
   const value = parseJson(text);
   if (!isPlainObject(value)) throw malformed('request body must be a JSON object');
   return value;
@@ -55,7 +66,7 @@ function decodePath(pathname) {
 
 async function dispatch(req) {
   const url = new URL(req.url, 'http://localhost');
-  const text = await readBody(req);
+  const bytes = await readBody(req);
   const matched = matchRoute(req.method, url.pathname);
   if (!matched) throw notFound(`no endpoint ${req.method} ${url.pathname}`);
   const { route } = matched;
@@ -67,8 +78,8 @@ async function dispatch(req) {
   const user = route.auth ? authenticate(state, req.headers.authorization) : null;
   if (route.operator && !state.isOperator(user.id)) throw forbidden('settlement operators only');
   const key = route.idempotent ? idempotencyKey(utf8Header(req.headers['idempotency-key'])) : null;
-  const bodyAbsent = req.method !== 'POST' || (route.noBody && text === '');
-  const body = bodyAbsent ? {} : parseBody(text);
+  const bodyAbsent = req.method !== 'POST' || (route.noBody && bytes.length === 0);
+  const body = bodyAbsent ? {} : parseBody(bytes);
   const context = { state, user, body, params, query: url.searchParams };
 
   // The endpoint is the matched route and its decoded parameters, not the raw spelling:

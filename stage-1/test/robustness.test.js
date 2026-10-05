@@ -118,3 +118,15 @@ test('S1-190: generated ids never collide with seeded ids', async () => {
   }
   assert.equal(ids.size, 42);
 });
+
+test('R18 S1-023 S1-059: a body that is not valid UTF-8 is 400 and changes nothing', async () => {
+  const w = await world(srv.base);
+  const raw = Buffer.concat([Buffer.from('{"to_handle":"bob","amount":5,"note":"'), Buffer.from([0xff, 0xfe]), Buffer.from('"}')]);
+  const res = await call(srv.base, 'POST', '/payments', { token: w.ada.token, key: newKey(), raw });
+  assert.deepEqual([res.status, res.body.error.code], [400, 'malformed_request']);
+  assert.equal(await w.ada.balance(), 10_000);
+  const ok = await call(srv.base, 'POST', '/payments', {
+    token: w.ada.token, key: newKey(), raw: Buffer.from('{"to_handle":"bob","amount":5,"note":"café 😀"}'),
+  });
+  assert.deepEqual([ok.status, ok.body.note], [201, 'café 😀']);
+});
