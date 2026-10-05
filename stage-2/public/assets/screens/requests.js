@@ -4,14 +4,15 @@ import { fill, h } from '../lib/dom.js';
 import { formatAmount } from '../lib/money.js';
 import { sentence, uncertainAbout } from '../lib/messages.js';
 import { timeEl } from '../lib/time.js';
-import { RetryIdentity, button, chip, emptyState, feedback, loadingRows, plate } from '../lib/ui.js';
+import { LatestRead, RetryIdentity, button, chip, emptyState, feedback, loadingRows, plate } from '../lib/ui.js';
 
 const LIST_LIMIT = 200;
 
 export function renderRequests(ctx, main) {
   const { money } = ctx;
   const fmt = (minor) => formatAmount(minor, money);
-  const state = { requests: null, me: ctx.me, readSeq: 0, appliedSeq: 0, rowNote: null };
+  const state = { requests: null, me: ctx.me, rowNote: null };
+  const reads = new LatestRead();
   // One retry identity per request, so a repeated Pay click on the same request is a replay.
   const payIdentities = new Map();
 
@@ -21,14 +22,14 @@ export function renderRequests(ctx, main) {
   fill(main, h('h1', { class: 'page-title' }, 'Requests'), strip, status, body);
 
   async function load() {
-    const seq = (state.readSeq += 1);
+    const seq = reads.begin();
     const [list, meRes] = await Promise.all([api('GET', `/requests?limit=${LIST_LIMIT}`), api('GET', '/me')]);
-    if (!ctx.view.alive || seq < state.appliedSeq) return;
+    if (!ctx.view.alive) return;
     if (!list.ok) {
       fill(body, feedback('refused', null, "Couldn't load your requests. Try again in a moment."));
       return;
     }
-    state.appliedSeq = seq;
+    if (!reads.accept(seq)) return;
     state.requests = list.body.requests;
     if (meRes.ok) state.me = meRes.body;
     render();

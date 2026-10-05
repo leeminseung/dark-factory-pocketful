@@ -5,7 +5,7 @@ import { hatchSwatch, icon } from '../lib/icons.js';
 import { amountHint, formatAmount, parseAmount } from '../lib/money.js';
 import { moneyRefusal, uncertainAbout } from '../lib/messages.js';
 import { clockNow, timeEl } from '../lib/time.js';
-import { RetryIdentity, button, emptyState, feedback, field, loadingRows, plate, privacy } from '../lib/ui.js';
+import { LatestRead, RetryIdentity, button, emptyState, feedback, field, loadingRows, plate, privacy } from '../lib/ui.js';
 
 const FEED_LIMIT = 200;
 
@@ -34,7 +34,8 @@ const FORMS = {
 export function renderWallet(ctx, main) {
   const { money } = ctx;
   const fmt = (minor) => formatAmount(minor, money);
-  const state = { me: ctx.me, payments: null, readSeq: 0, appliedSeq: 0 };
+  const state = { me: ctx.me, payments: null };
+  const reads = new LatestRead();
 
   // ---- balance panel -------------------------------------------------------
   const panel = h('section', { class: 'plum-panel balance', 'aria-label': 'Balance' });
@@ -172,20 +173,18 @@ export function renderWallet(ctx, main) {
     })));
   }
 
-  // ---- reading: the latest read wins --------------------------------------
-  // Each read is numbered; a response is applied only if no later read has been applied,
-  // so a slow earlier read can never overwrite a newer one (stage 2 "Latest refresh wins").
+  // ---- reading: the latest read wins (LatestRead) ---------------------------
   async function refresh() {
-    const seq = (state.readSeq += 1);
+    const seq = reads.begin();
     refreshing(true);
     const [meRes, feedRes] = await Promise.all([api('GET', '/me'), api('GET', `/activity?limit=${FEED_LIMIT}`)]);
-    if (!ctx.view.alive || seq < state.appliedSeq) return;
-    if (seq === state.readSeq) refreshing(false);
+    if (!ctx.view.alive) return;
+    if (reads.isLatest(seq)) refreshing(false);
     if (!meRes.ok || !feedRes.ok) {
-      if (seq === state.readSeq) updated.textContent = "Couldn't refresh. Try again.";
+      if (reads.isLatest(seq)) updated.textContent = "Couldn't refresh. Try again.";
       return;
     }
-    state.appliedSeq = seq;
+    if (!reads.accept(seq)) return;
     state.me = meRes.body;
     ctx.setMe(meRes.body);
     state.payments = feedRes.body.payments;

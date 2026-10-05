@@ -131,3 +131,31 @@ export class RetryIdentity {
   /** True when `bodyText` is the body last sent, so sending it would be a retry. */
   matches(bodyText) { return this.body !== null && bodyText === this.body; }
 }
+
+/**
+ * Latest read wins (stage 2): each read gets a number when it starts; its response is applied
+ * only if no later-numbered read has been applied already, so a delayed earlier read can never
+ * overwrite a newer one, whatever order the responses arrive in.
+ */
+export class LatestRead {
+  constructor() {
+    this.issued = 0;
+    this.applied = 0;
+  }
+
+  /** Numbers a read that is starting. */
+  begin() {
+    this.issued += 1;
+    return this.issued;
+  }
+
+  /** True, and recorded, when read `seq` may be applied. */
+  accept(seq) {
+    if (seq < this.applied) return false;
+    this.applied = seq;
+    return true;
+  }
+
+  /** True when `seq` is the newest read started. */
+  isLatest(seq) { return seq === this.issued; }
+}

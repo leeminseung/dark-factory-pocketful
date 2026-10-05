@@ -5,7 +5,7 @@ import { hatchSwatch } from '../lib/icons.js';
 import { amountHint, decimalOf, formatAmount, parseAmount } from '../lib/money.js';
 import { sentence, uncertainAbout } from '../lib/messages.js';
 import { deadline, friendlyTime } from '../lib/time.js';
-import { RetryIdentity, button, chip, emptyState, feedback, field, loadingRows, plate } from '../lib/ui.js';
+import { LatestRead, RetryIdentity, button, chip, emptyState, feedback, field, loadingRows, plate } from '../lib/ui.js';
 
 const LIST_LIMIT = 200;
 
@@ -13,7 +13,8 @@ export function renderAuthorizations(ctx, main) {
   const { money } = ctx;
   const fmt = (minor) => formatAmount(minor, money);
   const mine = ctx.me.user_id;
-  const state = { list: null, readSeq: 0, appliedSeq: 0, rowNote: null };
+  const state = { list: null, rowNote: null };
+  const reads = new LatestRead();
   const identities = new Map(); // authorization id -> retry identity of its capture
   const captureInputs = new Map(); // authorization id -> typed amount, kept across refreshes
 
@@ -23,14 +24,14 @@ export function renderAuthorizations(ctx, main) {
   fill(main, h('h1', { class: 'page-title' }, 'Reserved money'), strip, status, body);
 
   async function load() {
-    const seq = (state.readSeq += 1);
+    const seq = reads.begin();
     const res = await api('GET', `/authorizations?limit=${LIST_LIMIT}`);
-    if (!ctx.view.alive || seq < state.appliedSeq) return;
+    if (!ctx.view.alive) return;
     if (!res.ok) {
       fill(body, feedback('refused', null, "Couldn't load reserved money. Try again in a moment."));
       return;
     }
-    state.appliedSeq = seq;
+    if (!reads.accept(seq)) return;
     state.list = res.body.authorizations;
     render();
   }
