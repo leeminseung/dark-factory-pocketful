@@ -1,13 +1,11 @@
 // `/`: the balance panel, the three money forms (send, ask, reserve) and the activity feed.
-import { api } from '../lib/api.js';
+import { api, readAll } from '../lib/api.js';
 import { fill, h } from '../lib/dom.js';
 import { hatchSwatch, icon } from '../lib/icons.js';
 import { amountHint, formatAmount, parseAmount } from '../lib/money.js';
 import { moneyRefusal, uncertainAbout } from '../lib/messages.js';
 import { clockNow, timeEl } from '../lib/time.js';
 import { LatestRead, RetryIdentity, button, emptyState, feedback, field, loadingRows, plate, privacy } from '../lib/ui.js';
-
-const FEED_LIMIT = 200;
 
 // The three money forms differ only in these facts.
 const FORMS = {
@@ -177,7 +175,7 @@ export function renderWallet(ctx, main) {
   async function refresh() {
     const seq = reads.begin();
     refreshing(true);
-    const [meRes, feedRes] = await Promise.all([api('GET', '/me'), api('GET', `/activity?limit=${FEED_LIMIT}`)]);
+    const [meRes, feedRes] = await Promise.all([api('GET', '/me'), readAll('/activity', 'payments')]);
     if (!ctx.view.alive) return;
     if (reads.isLatest(seq)) refreshing(false);
     if (!meRes.ok || !feedRes.ok) {
@@ -187,7 +185,7 @@ export function renderWallet(ctx, main) {
     if (!reads.accept(seq)) return;
     state.me = meRes.body;
     ctx.setMe(meRes.body);
-    state.payments = feedRes.body.payments;
+    state.payments = feedRes.items;
     renderBalance();
     renderFeed();
     updated.textContent = `Updated ${clockNow()}`;

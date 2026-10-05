@@ -1,13 +1,11 @@
 // `/authorizations` ("Reserved"): money held for others and money held for you to collect.
-import { api } from '../lib/api.js';
+import { api, readAll } from '../lib/api.js';
 import { fill, h } from '../lib/dom.js';
 import { hatchSwatch } from '../lib/icons.js';
 import { amountHint, decimalOf, formatAmount, parseAmount } from '../lib/money.js';
 import { sentence, uncertainAbout } from '../lib/messages.js';
 import { deadline, friendlyTime } from '../lib/time.js';
 import { LatestRead, RetryIdentity, button, chip, emptyState, feedback, field, loadingRows, plate } from '../lib/ui.js';
-
-const LIST_LIMIT = 200;
 
 export function renderAuthorizations(ctx, main) {
   const { money } = ctx;
@@ -25,14 +23,14 @@ export function renderAuthorizations(ctx, main) {
 
   async function load() {
     const seq = reads.begin();
-    const res = await api('GET', `/authorizations?limit=${LIST_LIMIT}`);
+    const res = await readAll('/authorizations', 'authorizations');
     if (!ctx.view.alive) return;
     if (!res.ok) {
       if (reads.isLatest(seq)) fill(body, feedback('refused', null, "Couldn't load reserved money. Try again in a moment."));
       return;
     }
     if (!reads.accept(seq)) return;
-    state.list = res.body.authorizations;
+    state.list = res.items;
     render();
   }
 

@@ -1,12 +1,10 @@
 // `/requests`: what others asked of you and what you asked, with pay, decline and cancel.
-import { api } from '../lib/api.js';
+import { api, readAll } from '../lib/api.js';
 import { fill, h } from '../lib/dom.js';
 import { formatAmount } from '../lib/money.js';
 import { sentence, uncertainAbout } from '../lib/messages.js';
 import { timeEl } from '../lib/time.js';
 import { LatestRead, RetryIdentity, button, chip, emptyState, feedback, loadingRows, plate } from '../lib/ui.js';
-
-const LIST_LIMIT = 200;
 
 export function renderRequests(ctx, main) {
   const { money } = ctx;
@@ -23,14 +21,14 @@ export function renderRequests(ctx, main) {
 
   async function load() {
     const seq = reads.begin();
-    const [list, meRes] = await Promise.all([api('GET', `/requests?limit=${LIST_LIMIT}`), api('GET', '/me')]);
+    const [list, meRes] = await Promise.all([readAll('/requests', 'requests'), api('GET', '/me')]);
     if (!ctx.view.alive) return;
     if (!list.ok) {
       if (reads.isLatest(seq)) fill(body, feedback('refused', null, "Couldn't load your requests. Try again in a moment."));
       return;
     }
     if (!reads.accept(seq)) return;
-    state.requests = list.body.requests;
+    state.requests = list.items;
     if (meRes.ok) state.me = meRes.body;
     render();
   }

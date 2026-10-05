@@ -48,3 +48,25 @@ function onSignedOut() {
   session.token = null;
   signedOutHandler();
 }
+
+const PAGE_LIMIT = 200; // the API's largest page (stage-1 §5)
+
+/**
+ * Reads a whole list page by page until has_more is false. `fetchPage(offset, limit)` resolves to
+ * { ok, items, hasMore }; any failed page fails the whole read, so a screen never shows half a list.
+ */
+export async function collectPages(fetchPage) {
+  const items = [];
+  for (let offset = 0; ; offset += PAGE_LIMIT) {
+    const page = await fetchPage(offset, PAGE_LIMIT);
+    if (!page.ok) return { ok: false };
+    items.push(...page.items);
+    if (!page.hasMore) return { ok: true, items };
+  }
+}
+
+/** GET a whole list endpoint (`/activity`, `/requests`, `/authorizations`); `field` names its array. */
+export const readAll = (path, field) => collectPages(async (offset, limit) => {
+  const res = await api('GET', `${path}?limit=${limit}&offset=${offset}`);
+  return res.ok ? { ok: true, items: res.body[field], hasMore: res.body.has_more } : { ok: false };
+});
