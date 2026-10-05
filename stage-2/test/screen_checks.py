@@ -89,6 +89,10 @@ try:
       check('D4 tiny held gets >=16px hatch', seg >= 16, f'held segment {seg}px')
       sw = pg.evaluate("document.querySelector('.hatch-swatch svg') ? document.querySelectorAll('.hatch-swatch svg path, .hatch-swatch svg line').length : 0")
       check('D7 swatch is drawn hatch (svg lines)', sw >= 1, f'svg paths {sw}')
+      # D12: wallet-held sits level with its label
+      centers = pg.evaluate("""(() => { const c = (e) => { const g = document.createRange(); g.selectNodeContents(e); const r = [...g.getClientRects()].pop(); return r.bottom; };
+          return [c(document.querySelector('.held-line dt')), c(document.querySelector('[data-testid=wallet-held]'))]; })()""")
+      check('D12 wallet-held level with its label', abs(centers[0] - centers[1]) <= 3, f'label/amount text bottoms {centers}')
       # D8: one icon while refreshing: put the button in its busy state and count what shows
       icons = pg.evaluate("""(() => { const b = document.querySelector('[data-testid=wallet-refresh]'); b.classList.add('is-busy');
           const n = [...b.querySelectorAll('.icon')].filter(e => getComputedStyle(e).display !== 'none').length; b.classList.remove('is-busy'); return n; })()""")
