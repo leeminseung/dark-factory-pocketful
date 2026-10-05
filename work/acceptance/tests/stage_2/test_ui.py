@@ -996,7 +996,7 @@ def test_capture_from_screen(auths, page):
     page.click(sel(f"authorization-capture-{aid}"))
     page.wait_for_selector(f"{sel('authorization-item-' + aid)}[data-status='captured']")
     assert text(page, f"authorization-captured-{aid}") == "12.50 EUR"
-    assert auths.bob.balance() == 2500 - 1250
+    assert auths.bob.balance() == 2500 - 123 - 1250   # in_partial already captured 1.23
     assert page.locator(sel(f"authorization-capture-{aid}")).count() == 0
 
 
