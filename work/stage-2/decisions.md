@@ -13,6 +13,10 @@
   (`--all --mode isolated`) -> accept, final screenshots by product-designer.
 - Handoff sent 2026-10-06 to implementer, test-designer and product-designer in 5 numbered parts (full stage-2 spec
   pasted; carry-forward S1-RISK-1, S1-R17, S1-R19/R21 and watch items in part 4).
+- List check (6a7fcaf, 160 rows): asked test-designer for 4 rows — void unknown id 404; GET /authorizations query
+  errors; seeded authorization validation (reset and import, 422 changing nothing); upgrade import carries ttl (stage-1
+  export -> 600 and empty list; stage-2 export keeps ttl).
+- Design direction work/design.md (1af11a0) sent to implementer with summary; screens may start.
 
 ## Rounds
 
