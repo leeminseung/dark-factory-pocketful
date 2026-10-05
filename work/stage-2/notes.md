@@ -32,6 +32,26 @@ Stage 1's notes (work/stage-1/notes.md) still apply to everything stage 2 did no
   in the browser. `/requests` and `/authorizations` serve it only when `Accept` includes `text/html`.
   Assets are read into memory at startup, and only those files can be served.
 
+- **Browser session** is the bearer token in `localStorage`. It survives navigation and reloads,
+  and an export/import keeps the same token valid, so a signed-in browser stays signed in across
+  the upgrade. A 401 from the service clears it and opens `/login`.
+- **Retry identity follows the body sent** (`RetryIdentity`, public/assets/lib/ui.js). A write keeps the
+  key of the body last sent. Resubmitting, retrying after a lost answer, and editing a field then
+  changing it back all reuse that key, so they replay. Any other body gets a new key. This is the
+  test-designer's reading of "unchanged" (a field edited and restored is unchanged). The cost: after a
+  success, sending exactly the same values again is a replay, not a second payment.
+- **Unknown outcome** = the network failed, the response was lost or unreadable, or a 5xx. It shows
+  the dashed uncertain line, keeps the key, and does not refresh, because nothing is known. A 4xx is
+  a refusal: it shows the form's error, refreshes the data and keeps the inputs.
+- **Latest read wins.** Every read on a screen is numbered, and a response is applied only if no
+  later-numbered read has already been applied. Refresh stays clickable while a read is in flight,
+  so a newer click can overtake a slow one.
+- **The split preview runs the server's rule**: src/shared/shares.js is imported by the server and
+  served to the browser as /assets/shared/shares.js.
+- **Fonts and icons**: Atkinson Hyperlegible Next 400/600/800 WOFF2 and its OFL.txt are in
+  public/assets (taken from googlefonts/atkinson-hyperlegible-next), and the icons are inline SVG.
+  Nothing is fetched at run time.
+
 ## Unfixed non-blocking findings
 
 (none yet)
