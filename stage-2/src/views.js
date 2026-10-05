@@ -1,5 +1,6 @@
 // The JSON shape of each resource in responses (§6, §8, §11), in one place.
 import { formatTimestamp } from './clock.js';
+import { remainingOf } from './model.js';
 
 export function paymentView(state, payment) {
   const from = state.users.get(payment.fromUserId);
@@ -86,7 +87,7 @@ export function authorizationView(state, authorization) {
     to_handle: to.handle,
     amount: authorization.amount,
     captured_amount: authorization.capturedAmount,
-    remaining_amount: state.remainingOf(authorization),
+    remaining_amount: remainingOf(authorization),
     currency: state.currency,
     note: authorization.note,
     visibility: authorization.visibility,

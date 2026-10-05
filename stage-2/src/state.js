@@ -193,15 +193,10 @@ export class State {
 
   // ---- holds and authorizations ----------------------------------------
 
-  /** The amount an authorization still holds: zero once it is closed (model.js). */
-  remainingOf(authorization) {
-    return remainingOf(authorization);
-  }
-
   /** The sum of the user's open holds. */
   heldBy(userId) {
     let held = 0;
-    for (const a of this.openAuthorizations) if (a.fromUserId === userId) held += this.remainingOf(a);
+    for (const a of this.openAuthorizations) if (a.fromUserId === userId) held += remainingOf(a);
     return held;
   }
 
@@ -260,7 +255,7 @@ export class State {
    */
   captureAuthorization(authorization, { amount = null, final = true }) {
     this.requireOpen(authorization);
-    const remaining = this.remainingOf(authorization);
+    const remaining = remainingOf(authorization);
     const captured = amount ?? remaining;
     if (captured > remaining) throw captureExceedsAuthorization();
     const before = { capturedAmount: authorization.capturedAmount, paymentIds: authorization.paymentIds };
