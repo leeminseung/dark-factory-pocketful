@@ -350,3 +350,17 @@ test('R16 S2-102 S1-158: imported times must agree: no record after the clock, a
   }
   assert.equal((await call(srv.base, 'POST', '/_test/import', { json: good })).status, 204);
 });
+
+test('R18 S2-092: a seeded expires_at before 1970 is valid RFC 3339 and is kept exactly', async () => {
+  const seed = (id, expires_at) => ({ id, from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 10, note: '', visibility: 'public', status: 'open', expires_at });
+  const w = await world(srv.base, fixture({ authorizations: [
+    seed('a_1969', '1969-12-31T23:59:59Z'), seed('a_0050', '0050-06-01T12:00:00+00:00'), seed('a_0000', '0000-01-01T00:00:00+00:00'),
+  ] }));
+  const listed = Object.fromEntries((await w.ada.get('/authorizations')).body.authorizations.map((a) => [a.authorization_id, a]));
+  assert.equal(listed.a_1969.expires_at, '1969-12-31T23:59:59.000+00:00');
+  assert.equal(listed.a_0050.expires_at, '0050-06-01T12:00:00.000+00:00', 'year 50, not 1950');
+  assert.equal(listed.a_0000.expires_at, '0000-01-01T00:00:00.000+00:00');
+  assert.ok(Object.values(listed).every((a) => a.status === 'expired'));
+  const snapshot = (await call(srv.base, 'GET', '/_test/export')).body;
+  assert.equal((await call(srv.base, 'POST', '/_test/import', { json: snapshot })).status, 204);
+});

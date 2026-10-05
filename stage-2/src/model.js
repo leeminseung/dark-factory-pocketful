@@ -19,6 +19,8 @@ export const AUTHORIZATION_STATUSES = ['open', 'captured', 'voided', 'expired'];
 export const DEFAULT_AUTHORIZATION_TTL_SECONDS = 600;
 /** The last instant with an RFC 3339 form (§3.4): 9999-12-31T23:59:59.999Z, as epoch ms. */
 export const MAX_TIMESTAMP_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
+/** The first instant with an RFC 3339 form: 0000-01-01T00:00:00.000Z (negative epoch ms). */
+export const MIN_TIMESTAMP_MS = new Date(Date.UTC(2000, 0, 1)).setUTCFullYear(0);
 
 
 /** A JSON number with an integral value (1000, 1000.0 and 1e3 alike); never a string or boolean. */
@@ -37,7 +39,7 @@ export const isNote = (value) => typeof value === 'string' && charCount(value) <
 export const isVisibility = (value) => VISIBILITIES.includes(value);
 export const isRequestStatus = (value) => REQUEST_STATUSES.includes(value);
 /** A stored time in epoch ms that formats as RFC 3339: 1970 to the end of year 9999. */
-export const isTimestampMs = (value) => isIntegerIn(value, 0, MAX_TIMESTAMP_MS);
+export const isTimestampMs = (value) => isIntegerIn(value, MIN_TIMESTAMP_MS, MAX_TIMESTAMP_MS);
 export const isAuthorizationStatus = (value) => AUTHORIZATION_STATUSES.includes(value);
 /**
  * Fixed bounds (ruling 2abb370), so that "expires_at is created_at plus the ttl", RFC 3339 output
