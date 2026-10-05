@@ -65,4 +65,14 @@
 ## Unfixed non-blocking findings
 
 - R4: ruled no change (decisions.md): pay with an empty body stays 400.
-- R10 (commit discipline) cannot change history; round-2 fixes are one defect per commit, each after its failing test.
+- R10, R19, R21 (commit discipline): history cannot be rewritten. 7d084dc was labelled a restructure
+  but also made import stricter, and b82da36 claimed "links" were checked when only their form was
+  (now done in 01d0aa6). The commits from round 3 on separate restructuring from behaviour, and each
+  message states what the commit does.
+- R17: kept. A fixture or import whose balances total more than 2^53 is 422. §4 says "no operation
+  produces a balance outside ±2⁵³", and in such a state one payment between two wallets could break
+  that, so the state is outside the model.
+- R23: a synchronous handler that returns a Promise cannot be detected before it runs. Since 667a5f0
+  every synchronous handler runs in a State transaction, so when runIdempotent refuses the Promise,
+  the changes made so far are undone and no key is recorded (state.test.js). Work the Promise does
+  later would still escape; no handler does this, and defineRoutes refuses async handlers.

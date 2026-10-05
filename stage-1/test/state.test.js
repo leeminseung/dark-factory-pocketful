@@ -50,3 +50,15 @@ test('R22: closeRequest accepts only the three terminal statuses', () => {
   state.closeRequest(request, 'declined');
   assert.equal(request.status, 'declined');
 });
+
+test('R23: a sync handler that returns a Promise is refused, and its changes are undone', () => {
+  const state = twoUsers();
+  const ctx = { userId: 'u_a', method: 'POST', route: '/payments', params: {}, key: 'k', body: {} };
+  const sneaky = () => {
+    state.movePayments([transfer], { createdAt: state.nextTimestamp() });
+    return Promise.resolve({});
+  };
+  assert.throws(() => state.transaction(() => runIdempotent(state, ctx, sneaky)), /must be synchronous/);
+  assert.equal(state.users.get('u_a').balance, 100);
+  assert.equal(state.idempotency.size, 0);
+});
