@@ -931,7 +931,7 @@ def test_authorize_error(seeded, page, handle, amount):
 def auths(seeded):
     w = seeded
     w.a = {}
-    w.a["in_open"] = ok(authorize(w.bob, "ada", 2000, note="in"), 201)
+    w.a["in_open"] = ok(authorize(w.bob, "ada", 1500, note="in"), 201)   # bob 2500: 1500 + 900 held
     w.a["out_open"] = ok(authorize(w.ada, "cy", 1500), 201)
     w.a["in_captured"] = ok(authorize(w.cy, "ada", 300), 201)
     ok(capture(w.ada, w.a["in_captured"]["authorization_id"], {"amount": 250}), 201)
