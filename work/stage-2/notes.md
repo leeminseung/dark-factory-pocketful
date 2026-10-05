@@ -45,6 +45,11 @@ Stage 1's notes (work/stage-1/notes.md) still apply to everything stage 2 did no
 - **Unknown outcome** = the network failed, the response was lost or unreadable, or a 5xx. It shows
   the dashed uncertain line, keeps the key, and does not refresh, because nothing is known. A 4xx is
   a refusal: it shows the form's error, refreshes the data and keeps the inputs.
+- **A lost read is asked again.** A GET that gets no answer within 3 s is abandoned and asked once
+  more (reads change nothing). Writes are never retried by the client: their retry is the person's,
+  with the same key. This came from the acceptance test test_refresh_waits_for_a_slow_write, which
+  failed intermittently (3 of 15 locally). Its `unroute` can strand a read that was intercepted at
+  that moment, and before this change the screen then waited forever.
 - **Latest read wins.** Every read on a screen is numbered, and a response is applied only if no
   later-numbered read has already been applied. Refresh stays clickable while a read is in flight,
   so a newer click can overtake a slow one.
@@ -56,4 +61,5 @@ Stage 1's notes (work/stage-1/notes.md) still apply to everything stage 2 did no
 
 ## Unfixed non-blocking findings
 
-(none yet)
+- R8 (commit discipline): ab98ad7 and 4e74eea cannot be split after the fact. From round 2 on, each
+  commit has one purpose.

@@ -20,20 +20,38 @@ export const session = {
 export const newKey = () => (crypto.randomUUID ? crypto.randomUUID()
   : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 
+/**
+ * How long a read may go unanswered before it counts as lost (the service answers within 5 s,
+ * stage-1 §2). A lost read is asked once more: reads change nothing, so asking again is safe,
+ * and a screen is never left waiting on an answer that will not come. Writes are never retried
+ * here; their retry is the person's, with the same key (lib/ui.js RetryIdentity).
+ */
+export const READ_TIMEOUT_MS = 3000;
+const READ_ATTEMPTS = 2;
+
+/** One fetch: resolves to { response, parsed } or throws when there is no usable answer. */
+async function exchange(method, path, headers, body, signal) {
+  const response = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal });
+  const text = await response.text();
+  return { response, parsed: text ? JSON.parse(text) : null };
+}
+
 export async function api(method, path, { body, key } = {}) {
   const headers = { Accept: 'application/json' };
   if (session.token) headers.Authorization = `Bearer ${session.token}`;
   if (key) headers['Idempotency-Key'] = key;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  let response;
-  let parsed;
-  try {
-    response = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    const text = await response.text();
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    return { unknown: true };
+  const isRead = method === 'GET';
+  let answer = null;
+  for (let attempt = 1; attempt <= (isRead ? READ_ATTEMPTS : 1) && !answer; attempt += 1) {
+    try {
+      answer = await exchange(method, path, headers, body, isRead ? AbortSignal.timeout(READ_TIMEOUT_MS) : undefined);
+    } catch {
+      answer = null;
+    }
   }
+  if (!answer) return { unknown: true };
+  const { response, parsed } = answer;
   if (response.status >= 500) return { unknown: true };
   if (response.ok) return { ok: true, status: response.status, body: parsed };
   const error = parsed?.error ?? {};
