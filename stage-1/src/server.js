@@ -2,6 +2,7 @@
 import http from 'node:http';
 import { ApiError, forbidden, malformed, notFound, unauthenticated } from './errors.js';
 import { runIdempotent } from './idempotency.js';
+import { parseJson } from './json.js';
 import { matchRoute } from './routes.js';
 import { store } from './state.js';
 import { idempotencyKey, isPlainObject } from './validate.js';
@@ -29,12 +30,7 @@ function readBody(req) {
 
 /** A POST body must be a JSON object; an empty body does not parse (§5 malformed_request). */
 function parseBody(text) {
-  let value;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    throw malformed('request body is not valid JSON');
-  }
+  const value = parseJson(text);
   if (!isPlainObject(value)) throw malformed('request body must be a JSON object');
   return value;
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { equalShares } from '../src/handlers/splits.js';
-import { canonicalJson } from '../src/idempotency.js';
+import { canonicalJson } from '../src/json.js';
 import { call, fixture, newKey, user, useServer, world } from './helpers.js';
 
 const srv = useServer();
