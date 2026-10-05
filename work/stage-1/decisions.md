@@ -11,6 +11,13 @@
   -> final review with `--mode isolated` -> accept.
 - Handoff sent 2026-10-06 to implementer and test-designer in 5 numbered parts (full spec pasted).
 
+- List check (9071dcb): asked test-designer for 4 missing rows — decline/cancel unknown id 404; response amounts are JSON
+  integers; idempotency order (401 and 400 malformed before claimed-key resolution); generated ids never collide with
+  seeded/imported ids. Not yet in the list at 3e0b6ba; re-requested.
+- Implementer revision for checking: 505958b (stage-1 content = f636c55); supplied checks pass (147) incl. isolated.
+- Suite ready at 3e0b6ba (510 tests); command `work/acceptance/run.sh stage-1 1`. Test-designer's informal preview on
+  f636c55: 10 failures (S1-059, S1-073, S1-070, S1-158, S1-058) forwarded to implementer before round 1.
+
 ## Rounds
 
 ## Rulings
