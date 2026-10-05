@@ -440,7 +440,10 @@ button spinners and the refresh icon, both static under reduced motion.
 ## 10. Real content to test with
 
 Handles `grace_okafor_lindqvi` (20 chars), `l1_0o`; display name "Maximiliane Okafor-Lindqvist";
-amounts `1000000000.00 EUR`, `999999.99 EUR`, `1200 JPY`, `0.01 EUR`; a 200-character note with
+amounts `1000000000.00 EUR`, `999999.99 EUR`, `1200 JPY`, `0.01 EUR`, and balances up to 2^53−1
+minor units in EUR, JPY and BHD (`90071992547409.91 EUR`, `9007199254740991 JPY`,
+`9007199254740.991 BHD`): the available headline shrinks to fit on one line rather than
+overflow, and keeps 40/56 px for typical balances; a 200-character note with
 no spaces; timestamps from 2025 and from today; 3 holds open and 0 holds (held line absent).
 
 ## 11. Changes from the selected concept and why
