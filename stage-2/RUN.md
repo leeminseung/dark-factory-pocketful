@@ -29,6 +29,15 @@ npm test
 
 Runs the service's own tests (`test/*.test.js`) against an in-process server; needs Node 22 or later.
 
+Screen checks (layout and browser behaviour the Node tests cannot see):
+
+```sh
+python3 test/screen_checks.py
+```
+
+Needs Python with Playwright and Chromium (`pip install playwright && playwright install chromium`). It
+starts the service on a free port, seeds it and checks the screens at 375 px and 1280 px; exit 0 means all pass.
+
 ## Layout
 
 | Path | Holds |
