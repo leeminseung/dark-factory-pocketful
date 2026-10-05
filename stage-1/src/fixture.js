@@ -6,14 +6,12 @@ import { invalid, malformed } from './errors.js';
 import { hashPassword } from './passwords.js';
 import { State } from './state.js';
 import {
-  EMAIL_PATTERN, HANDLE_PATTERN, amount, charCount, isPlainObject, note, visibility,
+  BALANCE_LIMIT, EMAIL_PATTERN, HANDLE_PATTERN, amount, charCount, isPlainObject, note, visibility,
 } from './validate.js';
 
 export const MINOR_UNITS = [0, 2, 3];
 export const REQUEST_STATUSES = ['pending', 'paid', 'declined', 'cancelled'];
 export const MAX_ID_CHARS = 64;
-const TOTAL_LIMIT = 2 ** 53;
-
 const has = (obj, name) => Object.prototype.hasOwnProperty.call(obj, name);
 
 /** Reads a field of a fixture object: a wrong JSON type is 400, a missing one 422. */
@@ -52,7 +50,7 @@ function readUser(raw, where) {
     password: read(raw, 'password', 'string', where),
     displayName: read(raw, 'display_name', 'string', where),
     handle: read(raw, 'handle', 'string', where),
-    balance: amount(raw, 'balance', { min: 0, max: TOTAL_LIMIT }),
+    balance: amount(raw, 'balance', { min: 0, max: BALANCE_LIMIT }),
   };
   if (!EMAIL_PATTERN.test(user.email)) throw invalid(`${where}.email is not local@domain`);
   if (!HANDLE_PATTERN.test(user.handle)) throw invalid(`${where}.handle does not match ${HANDLE_PATTERN}`);
@@ -103,7 +101,7 @@ export function parseFixture(body) {
   requireUnique(users.map((u) => u.id), 'user id');
   requireUnique(users.map((u) => u.email.toLowerCase()), 'email');
   requireUnique(users.map((u) => u.handle), 'handle');
-  if (users.reduce((sum, u) => sum + u.balance, 0) > TOTAL_LIMIT) {
+  if (users.reduce((sum, u) => sum + u.balance, 0) > BALANCE_LIMIT) {
     throw invalid('seeded balances exceed 2^53 in total');
   }
   const userIds = new Set(users.map((u) => u.id));

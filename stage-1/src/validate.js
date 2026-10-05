@@ -2,6 +2,8 @@
 import { invalid, malformed, missingIdempotencyKey } from './errors.js';
 
 export const MAX_AMOUNT = 1_000_000_000;
+/** §4: no balance, and so no total of balances, lies outside ±2^53. */
+export const BALANCE_LIMIT = 2 ** 53;
 export const MAX_NOTE_CHARS = 200;
 export const MAX_IDEMPOTENCY_KEY_CHARS = 255;
 export const HANDLE_PATTERN = /^[a-z0-9_]{1,20}$/;

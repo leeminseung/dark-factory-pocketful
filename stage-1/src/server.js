@@ -27,9 +27,8 @@ function readBody(req) {
   });
 }
 
-/** A POST body must be a JSON object; an empty body counts as {}. */
+/** A POST body must be a JSON object; an empty body does not parse (§5 malformed_request). */
 function parseBody(text) {
-  if (text.trim() === '') return {};
   let value;
   try {
     value = JSON.parse(text);
@@ -39,6 +38,9 @@ function parseBody(text) {
   if (!isPlainObject(value)) throw malformed('request body must be a JSON object');
   return value;
 }
+
+/** Node decodes header bytes as latin1; clients send UTF-8, so decode them again to count characters. */
+const utf8Header = (value) => (value === undefined ? undefined : Buffer.from(value, 'latin1').toString('utf8'));
 
 function authenticate(state, header) {
   const match = /^Bearer[ \t]+(\S+)[ \t]*$/i.exec(header ?? '');
@@ -68,8 +70,8 @@ async function dispatch(req) {
   const state = store.current;
   const user = route.auth ? authenticate(state, req.headers.authorization) : null;
   if (route.operator && !state.isOperator(user.id)) throw forbidden('settlement operators only');
-  const key = route.idempotent ? idempotencyKey(req.headers['idempotency-key']) : null;
-  const body = req.method === 'POST' ? parseBody(text) : {};
+  const key = route.idempotent ? idempotencyKey(utf8Header(req.headers['idempotency-key'])) : null;
+  const body = req.method === 'POST' && !route.noBody ? parseBody(text) : {};
   const context = { state, user, body, params, query: url.searchParams };
 
   if (!route.idempotent) return route.handler(context);
@@ -103,10 +105,34 @@ async function handle(req, res) {
   }
 }
 
+const MAX_HEADER_BYTES = 1024 * 1024;
+
+/**
+ * A request Node cannot parse (headers over MAX_HEADER_BYTES, a broken request line) never
+ * reaches `handle`; answer it here so it still gets the §5 error body.
+ */
+function refuseUnparseable(err, socket) {
+  if (!socket.writable) return;
+  const tooLarge = err.code === 'HPE_HEADER_OVERFLOW';
+  const payload = JSON.stringify({ error: {
+    code: 'malformed_request',
+    message: tooLarge ? 'request headers are too large' : 'request could not be parsed',
+  } });
+  socket.end([
+    `HTTP/1.1 ${tooLarge ? '431 Request Header Fields Too Large' : '400 Bad Request'}`,
+    `Content-Type: ${JSON_TYPE}`,
+    `Content-Length: ${Buffer.byteLength(payload)}`,
+    'Connection: close',
+    '',
+    payload,
+  ].join('\r\n'));
+}
+
 export function createServer() {
-  const server = http.createServer((req, res) => {
+  const server = http.createServer({ maxHeaderSize: MAX_HEADER_BYTES }, (req, res) => {
     handle(req, res);
   });
+  server.on('clientError', refuseUnparseable);
   server.keepAliveTimeout = 65_000;
   return server;
 }

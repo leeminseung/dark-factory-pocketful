@@ -2,6 +2,7 @@
 //   auth:       a valid bearer token is required (§6)
 //   operator:   the caller must be a settlement operator (§11)
 //   idempotent: an Idempotency-Key is required and the handler runs through §7 replay rules
+//   noBody:     the endpoint defines no request body, so whatever is sent is ignored
 import { login, me, signup } from './handlers/auth.js';
 import { activity, createPayment } from './handlers/payments.js';
 import {
@@ -24,8 +25,8 @@ export const routes = [
   { method: 'POST', path: '/requests', handler: createRequest, auth: true, idempotent: true },
   { method: 'GET', path: '/requests', handler: listRequests, auth: true },
   { method: 'POST', path: '/requests/:id/pay', handler: payRequest, auth: true, idempotent: true },
-  { method: 'POST', path: '/requests/:id/decline', handler: declineRequest, auth: true },
-  { method: 'POST', path: '/requests/:id/cancel', handler: cancelRequest, auth: true },
+  { method: 'POST', path: '/requests/:id/decline', handler: declineRequest, auth: true, noBody: true },
+  { method: 'POST', path: '/requests/:id/cancel', handler: cancelRequest, auth: true, noBody: true },
   { method: 'POST', path: '/splits', handler: createSplit, auth: true, idempotent: true },
   {
     method: 'POST', path: '/settlements', handler: createSettlement,

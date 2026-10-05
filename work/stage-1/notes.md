@@ -39,13 +39,18 @@
 - **Wrong JSON types**: 400 `malformed_request` for top-level fields (`to_handle: 7`,
   `participant_handles: "ada"`), except the §5 field rules (`amount`, `note`, `visibility` are 422).
   Inside a settlement's `transfers`, every shape error is 422 (§11 "malformed batch shape is 422").
-  A body that is not a JSON object is 400. An empty body counts as `{}`.
+  A body that is not a JSON object is 400, and so is an empty body: it does not parse, and §7 resolves a
+  claimed key only after the body parsed. Decline and cancel define no body, so theirs is ignored.
 - **Fixture rules** beyond negative balance (minor_units, handle pattern, duplicate ids/emails/handles,
   unknown user references, unknown operator ids, seeded totals over 2^53) are 422; wrong JSON types
   in a fixture are 400. Seeded payment and request amounts may be 0 (a paid zero share).
 - **Settlement checks**: operator first (403), then key, then the batch. Entries are checked one by one in
   input order (fields, then handles, then self-transfer); the first defective entry decides the error;
   funds are checked last, on net totals.
+- **Header size**: Node's limit is raised to 1 MiB so a 64 KB header is served normally; anything larger,
+  or a request Node cannot parse, is answered from the `clientError` hook with the §5 body (431 or 400,
+  code `malformed_request`).
+- **Idempotency-Key** bytes are decoded as UTF-8 before counting characters (Node hands headers over as latin1).
 - **Offset** accepts any digit string; one past the end gives an empty page.
 
 ## Unfixed non-blocking findings

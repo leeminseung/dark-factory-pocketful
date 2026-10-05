@@ -6,7 +6,9 @@ import { invalid } from './errors.js';
 import { isPasswordHash } from './passwords.js';
 import { State } from './state.js';
 import { MINOR_UNITS, REQUEST_STATUSES } from './fixture.js';
-import { HANDLE_PATTERN, VISIBILITIES, isIntegralNumber, isPlainObject } from './validate.js';
+import {
+  BALANCE_LIMIT, HANDLE_PATTERN, MAX_AMOUNT, VISIBILITIES, isIntegralNumber, isPlainObject,
+} from './validate.js';
 
 export const TRACK = 'pocketful';
 export const FORMAT_VERSION = 1;
@@ -47,6 +49,7 @@ function check(condition, message) {
 const isString = (v) => typeof v === 'string';
 const isOptionalString = (v) => v === null || isString(v);
 const isCount = (v) => isIntegralNumber(v) && v >= 0;
+const isAmount = (v) => isCount(v) && v <= MAX_AMOUNT;
 const isList = (v, item) => Array.isArray(v) && v.every(item);
 
 function readList(state, name, item) {
@@ -72,7 +75,7 @@ export function importState(envelope) {
   readList(s, 'users', (u, at) => {
     check(isString(u.id) && isString(u.email) && isString(u.display_name), `${at} fields`);
     check(isString(u.handle) && HANDLE_PATTERN.test(u.handle), `${at}.handle`);
-    check(isCount(u.balance), `${at}.balance`);
+    check(isCount(u.balance) && u.balance <= BALANCE_LIMIT, `${at}.balance`);
     check(isPasswordHash(u.password_hash), `${at}.password_hash`);
     check(!state.users.has(u.id) && !state.userByEmail(u.email) && !state.userByHandle(u.handle),
       `${at} duplicates another user`);
@@ -81,6 +84,8 @@ export function importState(envelope) {
       handle: u.handle, balance: u.balance,
     });
   });
+  const total = [...state.users.values()].reduce((sum, u) => sum + u.balance, 0);
+  check(total <= BALANCE_LIMIT, 'balances exceed 2^53 in total');
   const isUser = (id) => state.users.has(id);
 
   check(isList(s.operator_ids, isUser), 'operator_ids');
@@ -94,7 +99,7 @@ export function importState(envelope) {
   readList(s, 'payments', (p, at) => {
     check(isString(p.id) && !state.paymentsById.has(p.id), `${at}.id`);
     check(isUser(p.from_user_id) && isUser(p.to_user_id), `${at} parties`);
-    check(isCount(p.amount) && isString(p.note) && VISIBILITIES.includes(p.visibility), `${at} fields`);
+    check(isAmount(p.amount) && isString(p.note) && VISIBILITIES.includes(p.visibility), `${at} fields`);
     check(isOptionalString(p.request_id) && isOptionalString(p.settlement_id), `${at} links`);
     check(isCount(p.created_at_ms), `${at}.created_at_ms`);
     state.addPayment({
@@ -107,7 +112,7 @@ export function importState(envelope) {
   readList(s, 'requests', (r, at) => {
     check(isString(r.id) && !state.requestsById.has(r.id), `${at}.id`);
     check(isUser(r.requester_id) && isUser(r.payer_id), `${at} parties`);
-    check(isCount(r.amount) && isString(r.note) && REQUEST_STATUSES.includes(r.status), `${at} fields`);
+    check(isAmount(r.amount) && isString(r.note) && REQUEST_STATUSES.includes(r.status), `${at} fields`);
     check(isOptionalString(r.payment_id) && isCount(r.created_at_ms), `${at} fields`);
     state.addRequest({
       id: r.id, requesterId: r.requester_id, payerId: r.payer_id, amount: r.amount,
