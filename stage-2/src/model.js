@@ -2,12 +2,11 @@
 // visibility, status, balance and authorization is. Every reader of outside data — API bodies
 // (validate.js), reset fixtures (fixture.js) and imported state (snapshot.js) — asks here.
 
-import { MAX_AMOUNT, MAX_NOTE_CHARS, charCount } from '../public/assets/shared/rules.js';
+import { EMAIL_PATTERN, MAX_AMOUNT, MAX_NOTE_CHARS, charCount } from '../public/assets/shared/rules.js';
 
-export { MAX_AMOUNT, MAX_NOTE_CHARS, charCount };
+export { EMAIL_PATTERN, MAX_AMOUNT, MAX_NOTE_CHARS, charCount };
 export const MAX_ID_CHARS = 64;
 export const HANDLE_PATTERN = /^[a-z0-9_]{1,20}$/;
-export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+$/; // local@domain
 /** No balance, and so no total of balances, lies outside ±2^53. */
 export const BALANCE_LIMIT = 2 ** 53;
 export const VISIBILITIES = ['public', 'private'];

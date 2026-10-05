@@ -3,7 +3,7 @@
 import { api } from '../lib/api.js';
 import { fill, h } from '../lib/dom.js';
 import { amountHint, formatAmount, parseAmount } from '../lib/money.js';
-import { sentence, uncertainAbout } from '../lib/messages.js';
+import { splitRefusal, uncertainAbout } from '../lib/messages.js';
 import { equalShares } from '../shared/shares.js';
 import { RetryIdentity, button, feedback, field } from '../lib/ui.js';
 
@@ -71,20 +71,10 @@ export function renderSplit(ctx, main) {
       fill(out, feedback('success', null, `Asked ${asked} ${asked === 1 ? 'person' : 'people'} for their share of ${fmt(minor)}. `),
         h('a', { href: '/requests', class: 'link' }, 'See requests'));
     } else if (result.refused) {
-      fill(out, feedback('refused', 'split-error', `Split not sent. ${splitReason(result, people)}`));
+      fill(out, feedback('refused', 'split-error', splitRefusal(result, { handles: people })));
     } else {
       fill(out, feedback('uncertain', null, uncertainAbout('split')));
     }
-  }
-
-  function splitReason(result, people) {
-    if (result.code === 'not_found') {
-      const unknown = /"([^"]+)"/.exec(result.message)?.[1] ?? people.join(', ');
-      return `No one has the handle ${unknown}. Check the list.`;
-    }
-    if (result.code === 'validation_failed' && /duplicate/i.test(result.message)) return 'Each handle can appear only once.';
-    if (result.code === 'validation_failed' && /empty|required/i.test(result.message)) return 'Add at least one handle.';
-    return sentence(result.message);
   }
 
   renderPreview();

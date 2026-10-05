@@ -4,6 +4,7 @@
 export const MAX_AMOUNT = 1_000_000_000;
 export const MAX_NOTE_CHARS = 200;
 export const MIN_PASSWORD_CHARS = 8;
+export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+$/; // local@domain
 
 /** Characters, not UTF-16 units or bytes: an emoji counts once (stage-1 D5). */
 export const charCount = (text) => [...text].length;

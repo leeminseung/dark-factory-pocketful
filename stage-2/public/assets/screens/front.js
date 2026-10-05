@@ -43,7 +43,7 @@ export const renderFrontDoor = (kind) => (ctx, main) => {
       return;
     }
     const text = result.refused
-      ? authRefusal(result, { email: body.email })
+      ? authRefusal(result, { email: body.email, password: body.password })
       : "We couldn't reach Pocketful. Check your connection and try again.";
     fill(errorSlot, feedback('refused', 'auth-error', text));
   }

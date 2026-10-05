@@ -1,6 +1,10 @@
 // What a refusal says to a person (design.md §5, §7). One place for every error code's words.
+// The wording depends only on the error `code` and on what the person sent: stage-1 §5 lets
+// the service's message use any wording, so it is shown only for codes with no words here.
 import { formatAmount } from './money.js';
-import { MAX_AMOUNT, MAX_NOTE_CHARS, charCount, deriveHandle } from '../shared/rules.js';
+import {
+  EMAIL_PATTERN, MAX_AMOUNT, MAX_NOTE_CHARS, MIN_PASSWORD_CHARS, charCount, deriveHandle,
+} from '../shared/rules.js';
 
 /**
  * The words for a refused money write (pay, request, reserve).
@@ -33,8 +37,8 @@ export const sentence = (text) => {
   return /[.!?]$/.test(capital) ? capital : `${capital}.`;
 };
 
-/** The words for a refused signup or login. */
-export function authRefusal(result, { email }) {
+/** The words for a refused signup or login, from its code and what was typed. */
+export function authRefusal(result, { email, password = '' }) {
   switch (result.code) {
     case 'email_taken':
       return 'An account with this email already exists. Log in instead.';
@@ -43,12 +47,30 @@ export function authRefusal(result, { email }) {
     case 'unauthenticated':
       return "That email and password don't match an account. Check both and try again.";
     case 'validation_failed':
-      return /password/i.test(result.message)
-        ? 'Use a password of at least 8 characters.'
+      // In the order the service checks them: the email's form, then the password's length.
+      return EMAIL_PATTERN.test(email) && charCount(password) < MIN_PASSWORD_CHARS
+        ? `Use a password of at least ${MIN_PASSWORD_CHARS} characters.`
         : 'Enter an email like name@example.com.';
     default:
       return `${sentence(result.message)} Check the details and try again.`;
   }
+}
+
+/** The words for a refused split, from its code and the handles that were sent. */
+export function splitRefusal(result, { handles }) {
+  let reason;
+  if (result.code === 'not_found') {
+    reason = handles.length === 1
+      ? `No one has the handle ${handles[0]}. Check the list.`
+      : `One of these handles doesn't belong to anyone: ${handles.join(', ')}. Check the list.`;
+  } else if (result.code === 'validation_failed' && handles.length === 0) {
+    reason = 'Add at least one handle.';
+  } else if (result.code === 'validation_failed' && new Set(handles).size !== handles.length) {
+    reason = 'Each handle can appear only once.';
+  } else {
+    reason = sentence(result.message);
+  }
+  return `Split not sent. ${reason}`;
 }
 
 /** The uncertain line for a write whose answer was lost (design.md §5.2 for a payment). */
