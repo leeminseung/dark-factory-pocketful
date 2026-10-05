@@ -62,3 +62,40 @@ test('R23: a sync handler that returns a Promise is refused, and its changes are
   assert.equal(state.users.get('u_a').balance, 100);
   assert.equal(state.idempotency.size, 0);
 });
+
+const openState = () => {
+  const state = twoUsers();
+  state.authorizationTtlSeconds = 600;
+  return state;
+};
+const terms = { fromUserId: 'u_a', toUserId: 'u_b', amount: 60, note: '', visibility: 'public' };
+const holdsOf = (state) => [state.heldBy('u_a'), state.availableOf('u_a'), state.users.get('u_a').balance, state.users.get('u_b').balance];
+
+test('R3: an authorize that fails halfway leaves no hold and no record', () => {
+  const state = openState();
+  assert.throws(() => state.transaction(() => {
+    state.openAuthorization(terms);
+    throw new Error('response could not be rendered');
+  }));
+  assert.deepEqual(holdsOf(state), [0, 100, 100, 0]);
+  assert.deepEqual([state.authorizations.length, state.authorizationsById.size, state.openAuthorizations.size], [0, 0, 0]);
+});
+
+test('R3: a capture or void that fails halfway leaves the hold, the balances and the record as they were', () => {
+  const state = openState();
+  const a = state.openAuthorization(terms);
+  for (const step of [
+    () => state.captureAuthorization(a, { amount: 20, final: false }),
+    () => state.captureAuthorization(a, { amount: 20, final: true }),
+    () => state.voidAuthorization(a),
+  ]) {
+    assert.throws(() => state.transaction(() => {
+      step();
+      throw new Error('response could not be rendered');
+    }));
+    assert.deepEqual(holdsOf(state), [60, 40, 100, 0]);
+    assert.deepEqual([a.status, a.capturedAmount, a.paymentIds], ['open', 0, []]);
+    assert.equal(state.payments.length, 0);
+    assert.ok(state.openAuthorizations.has(a));
+  }
+});
