@@ -9,7 +9,7 @@ below), the stage-2 "Product and visual direction" and UI sections, and the prod
 
 - Built `stage-2/` of 7364e79 in a worktree (`docker build`, tag `pd-review-7364e79`) and ran it
   on a free port. Drove it with Playwright (Chromium) at 375×812 and 1280×900.
-- 92 screenshots, kept outside the repository (`/tmp/pd-shots/7364e79/`): `/signup`, `/login`
+- 86 screenshots, kept outside the repository (`/tmp/pd-shots/7364e79/`): `/signup`, `/login`
   (plus their errors), `/` (holds, no holds, JPY), `/requests`, `/split`, `/authorizations`, each
   with its empty, loading, error, success, uncertain and held states where they apply.
 - Longest content used: display name "Maximiliane Okafor-Lindqvist", handle `grace_okafor_lindqvi`
@@ -45,7 +45,7 @@ below), the stage-2 "Product and visual direction" and UI sections, and the prod
 
 | Check | Result |
 |---|---|
-| No horizontal scrolling | Pass. `scrollWidth == clientWidth` on all 92 shots at 375 and 1280. |
+| No horizontal scrolling | Pass. `scrollWidth == clientWidth` on all 86 shots at 375 and 1280. |
 | Visible labels | Pass. Every input has a visible label above it, with hints where directed. |
 | Visible keyboard focus | Pass. There is a 2 px orchid outline with offset on inputs and buttons (`*-focus-input`, `*-focus-button`), and a lining-ring outline on Refresh inside the plum panel (`*-focus-in-panel`). |
 | Touch targets ≥44 px on phones | Mostly pass. All buttons, inputs, selects and nav segments are ≥44. Below 44: the "Pocketful" wordmark link (87×30), "Held for others" (125×24), and the front-door "Log in" / "Create an account" links (46×21) (D6). |
