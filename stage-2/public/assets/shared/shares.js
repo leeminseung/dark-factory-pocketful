@@ -1,5 +1,5 @@
 // The equal-split rule (stage-1 §9), shared by the server (handlers/splits.js) and the
-// browser's split preview (served as /assets/shared/shares.js), so both compute the same shares.
+// browser's split preview (served as /assets/shared/shares.js; the server imports it from here), so both compute the same shares.
 
 /** Whole units summing to `total`, differing by at most one; the first ones get the extra units. */
 export function equalShares(total, count) {

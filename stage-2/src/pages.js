@@ -20,8 +20,6 @@ const TYPES = {
 const SCREENS = new Set(['/', '/split', '/signup', '/login']);
 const SHARED_WITH_API = new Set(['/requests', '/authorizations']);
 
-const SHARED = fileURLToPath(new URL('./shared/', import.meta.url));
-
 const page = readFileSync(join(PUBLIC, 'index.html'));
 
 /** Every file under `dir`, served at `prefix` + its relative path. */
@@ -33,9 +31,9 @@ function filesUnder(dir, prefix) {
     }]);
 }
 
-// Only files that exist at startup can be served, so no path can reach outside the folders.
-// src/shared holds code the server and the browser both run (the split rule).
-const assets = new Map([...filesUnder(join(PUBLIC, 'assets'), '/assets/'), ...filesUnder(SHARED, '/assets/shared/')]);
+// Only files that exist at startup can be served, so no path can reach outside the folder.
+// public/assets/shared holds code the server imports too (the split rule, the model limits).
+const assets = new Map(filesUnder(join(PUBLIC, 'assets'), '/assets/'));
 
 const acceptsHtml = (accept) => typeof accept === 'string' && accept.toLowerCase().includes('text/html');
 

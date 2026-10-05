@@ -2,7 +2,7 @@
 // visibility, status, balance and authorization is. Every reader of outside data — API bodies
 // (validate.js), reset fixtures (fixture.js) and imported state (snapshot.js) — asks here.
 
-import { MAX_AMOUNT, MAX_NOTE_CHARS, charCount } from './shared/rules.js';
+import { MAX_AMOUNT, MAX_NOTE_CHARS, charCount } from '../public/assets/shared/rules.js';
 
 export { MAX_AMOUNT, MAX_NOTE_CHARS, charCount };
 export const MAX_ID_CHARS = 64;

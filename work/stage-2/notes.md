@@ -48,8 +48,8 @@ Stage 1's notes (work/stage-1/notes.md) still apply to everything stage 2 did no
 - **Latest read wins.** Every read on a screen is numbered, and a response is applied only if no
   later-numbered read has already been applied. Refresh stays clickable while a read is in flight,
   so a newer click can overtake a slow one.
-- **The split preview runs the server's rule**: src/shared/shares.js is imported by the server and
-  served to the browser as /assets/shared/shares.js.
+- **The split preview runs the server's rule**: public/assets/shared/shares.js (and rules.js, the
+  model limits) are imported by the server and served to the browser under /assets/shared/.
 - **Fonts and icons**: Atkinson Hyperlegible Next 400/600/800 WOFF2 and its OFL.txt are in
   public/assets (taken from googlefonts/atkinson-hyperlegible-next), and the icons are inline SVG.
   Nothing is fetched at run time.

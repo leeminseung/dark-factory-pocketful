@@ -2,7 +2,7 @@
 import { invalid, malformed } from '../errors.js';
 import { amount, note } from '../validate.js';
 import { splitView } from '../views.js';
-import { equalShares } from '../shared/shares.js';
+import { equalShares } from '../../public/assets/shared/shares.js';
 import { userWithHandle } from './handles.js';
 import { addPendingRequest } from './requests.js';
 

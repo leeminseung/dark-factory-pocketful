@@ -2,7 +2,7 @@
 import { emailTaken, handleTaken, invalid, unauthenticated } from '../errors.js';
 import { hashPassword, needsUpgrade, verifyNothing, verifyPassword } from '../passwords.js';
 import { charCount, isEmail } from '../model.js';
-import { MIN_PASSWORD_CHARS, deriveHandle } from '../shared/rules.js';
+import { MIN_PASSWORD_CHARS, deriveHandle } from '../../public/assets/shared/rules.js';
 import { requiredString } from '../validate.js';
 import { meView, sessionView } from '../views.js';
 

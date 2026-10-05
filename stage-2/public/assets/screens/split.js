@@ -1,5 +1,5 @@
 // `/split`: split an amount you paid; the preview shows each share before anything is sent,
-// computed by the same function the server uses (src/shared/shares.js, stage-1 §9).
+// computed by the same function the server uses (assets/shared/shares.js, stage-1 §9).
 import { api } from '../lib/api.js';
 import { fill, h } from '../lib/dom.js';
 import { amountHint, formatAmount, parseAmount } from '../lib/money.js';

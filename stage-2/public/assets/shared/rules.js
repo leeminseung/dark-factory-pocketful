@@ -1,4 +1,4 @@
-// Model rules the server and the browser both apply (served as /assets/shared/rules.js), so the
+// Model rules the server and the browser both apply (served as /assets/shared/rules.js; the server imports it from here), so the
 // screens' messages can never disagree with what the service enforces.
 
 export const MAX_AMOUNT = 1_000_000_000;
