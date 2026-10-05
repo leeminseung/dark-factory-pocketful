@@ -198,3 +198,17 @@ test('R1 S1-158: an import that breaks a model rule reset enforces is 422 and ch
   assert.equal(await w.ada.balance(), 10_000);
   assert.equal((await importState(good)).status, 204, 'the unchanged export is still accepted');
 });
+
+test('a split and its replay survive export and import', async () => {
+  const w = await world(srv.base);
+  const key = newKey();
+  const body = { amount: 10, participant_handles: ['ada', 'bob', 'cy'], note: 's' };
+  const split = (await w.ada.post('/splits', body, key)).body;
+  const snapshot = await exportState();
+  await reset(fixture());
+  assert.equal((await importState(snapshot)).status, 204);
+  const replay = await w.ada.post('/splits', body, key);
+  assert.deepEqual([replay.status, replay.body], [200, split]);
+  const broken = { ...snapshot, state: { ...snapshot.state, splits: [{ ...snapshot.state.splits[0], request_ids: ['rq_none'] }] } };
+  expectError(await importState(broken), 422, 'validation_failed');
+});

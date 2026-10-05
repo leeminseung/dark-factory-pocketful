@@ -1,8 +1,7 @@
 // POST /splits (§8) and the equal-split rule (§9).
 import { invalid, malformed } from '../errors.js';
 import { amount, note } from '../validate.js';
-import { formatTimestamp } from '../clock.js';
-import { requestView } from '../views.js';
+import { splitView } from '../views.js';
 import { userWithHandle } from './handles.js';
 import { addPendingRequest } from './requests.js';
 
@@ -40,22 +39,14 @@ export function createSplit({ state, user, body }) {
     .map(({ payer, share }) =>
       addPendingRequest(state, { requester: user, payer, amount: share, note: text, createdAt }));
   const split = {
-    id: state.newId('sp', (id) => state.splits.some((s) => s.id === id)),
-    requester_id: user.id,
+    id: state.newId('sp', (id) => state.splits.has(id)),
+    requesterId: user.id,
     amount: total,
     note: text,
     shares: handles.map((handle, i) => ({ handle, amount: shares[i] })),
-    request_ids: requests.map((r) => r.id),
-    created_at_ms: createdAt,
+    requestIds: requests.map((r) => r.id),
+    createdAt,
   };
-  state.splits.push(split);
-  return {
-    split_id: split.id,
-    amount: total,
-    currency: state.currency,
-    note: text,
-    shares: split.shares,
-    requests: requests.map((r) => requestView(state, r)),
-    created_at: formatTimestamp(createdAt),
-  };
+  state.addSplit(split);
+  return splitView(state, split);
 }

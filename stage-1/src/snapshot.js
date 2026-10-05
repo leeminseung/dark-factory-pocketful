@@ -36,8 +36,13 @@ export function exportState(state) {
       id: r.id, requester_id: r.requesterId, payer_id: r.payerId, amount: r.amount,
       note: r.note, status: r.status, payment_id: r.paymentId, created_at_ms: r.createdAt,
     })),
-    splits: state.splits,
-    settlements: state.settlements,
+    splits: [...state.splits.values()].map((sp) => ({
+      id: sp.id, requester_id: sp.requesterId, amount: sp.amount, note: sp.note,
+      shares: sp.shares, request_ids: sp.requestIds, created_at_ms: sp.createdAt,
+    })),
+    settlements: [...state.settlements.values()].map((st) => ({
+      id: st.id, committed_at_ms: st.committedAt, payment_ids: st.paymentIds,
+    })),
     idempotency: [...state.idempotency].map(([scope, record]) => ({ scope, ...record })),
   };
   // A JSON round trip detaches every nested object from the live state.
@@ -120,9 +125,21 @@ export function importState(envelope) {
     });
   });
 
-  state.splits = readList(s, 'splits', (sp, at) => check(isId(sp.id), `${at}.id`));
-  state.settlements = readList(s, 'settlements', (st, at) =>
-    check(isId(st.id) && isList(st.payment_ids, isId), at));
+  const isShare = (sh) => isPlainObject(sh) && isHandle(sh.handle) && isRecordAmount(sh.amount);
+  readList(s, 'splits', (sp, at) => {
+    check(isId(sp.id) && !state.splits.has(sp.id) && isUser(sp.requester_id), `${at} ids`);
+    check(isRecordAmount(sp.amount) && isNote(sp.note) && isCount(sp.created_at_ms), `${at} fields`);
+    check(isList(sp.shares, isShare) && isList(sp.request_ids, (id) => state.requestsById.has(id)), `${at} parts`);
+    state.addSplit({
+      id: sp.id, requesterId: sp.requester_id, amount: sp.amount, note: sp.note,
+      shares: sp.shares, requestIds: sp.request_ids, createdAt: sp.created_at_ms,
+    });
+  });
+  readList(s, 'settlements', (st, at) => {
+    check(isId(st.id) && !state.settlements.has(st.id) && isCount(st.committed_at_ms), `${at} fields`);
+    check(isList(st.payment_ids, (id) => state.paymentsById.has(id)), `${at}.payment_ids`);
+    state.addSettlement({ id: st.id, committedAt: st.committed_at_ms, paymentIds: st.payment_ids });
+  });
 
   readList(s, 'idempotency', (rec, at) => {
     check(isString(rec.scope) && isString(rec.fingerprint), at);

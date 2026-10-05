@@ -2,8 +2,7 @@
 import { invalid, selfPayment } from '../errors.js';
 import { counterparty, userWithHandle } from './handles.js';
 import { amount, isPlainObject, note, visibility } from '../validate.js';
-import { formatTimestamp } from '../clock.js';
-import { paymentView } from '../views.js';
+import { settlementView } from '../views.js';
 
 export const MAX_TRANSFERS = 32;
 
@@ -34,13 +33,10 @@ function readTransfer(state, entry, at) {
 /** Idempotent: returns the 201 body. The caller is already known to be an operator. */
 export function createSettlement({ state, body }) {
   const transfers = transferList(body).map((entry, i) => readTransfer(state, entry, `transfers[${i}]`));
-  const settlementId = state.newId('st', (id) => state.settlements.some((s) => s.id === id));
+  const settlementId = state.newId('st', (id) => state.settlements.has(id));
   const committedAt = state.nextTimestamp();
   const payments = state.movePayments(transfers, { settlementId, createdAt: committedAt });
-  state.settlements.push({ id: settlementId, committed_at_ms: committedAt, payment_ids: payments.map((p) => p.id) });
-  return {
-    settlement_id: settlementId,
-    committed_at: formatTimestamp(committedAt),
-    payments: payments.map((p) => paymentView(state, p)),
-  };
+  const settlement = { id: settlementId, committedAt, paymentIds: payments.map((p) => p.id) };
+  state.addSettlement(settlement);
+  return settlementView(state, settlement);
 }

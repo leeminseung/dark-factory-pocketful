@@ -1,4 +1,4 @@
-// The JSON shape of each resource in responses (§8, §11), in one place.
+// The JSON shape of each resource in responses (§6, §8, §11), in one place.
 import { formatTimestamp } from './clock.js';
 
 export function paymentView(state, payment) {
@@ -46,6 +46,28 @@ export function meView(state, user) {
     balance: user.balance,
     currency: state.currency,
     minor_units: state.minorUnits,
+  };
+}
+
+/** A split as POST /splits returns it: every share, and the requests it created. */
+export function splitView(state, split) {
+  return {
+    split_id: split.id,
+    amount: split.amount,
+    currency: state.currency,
+    note: split.note,
+    shares: split.shares.map(({ handle, amount }) => ({ handle, amount })),
+    requests: split.requestIds.map((id) => requestView(state, state.requestsById.get(id))),
+    created_at: formatTimestamp(split.createdAt),
+  };
+}
+
+/** A settlement as POST /settlements returns it: its member payments in input order. */
+export function settlementView(state, settlement) {
+  return {
+    settlement_id: settlement.id,
+    committed_at: formatTimestamp(settlement.committedAt),
+    payments: settlement.paymentIds.map((id) => paymentView(state, state.paymentsById.get(id))),
   };
 }
 

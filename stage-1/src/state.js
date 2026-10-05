@@ -21,8 +21,8 @@ export class State {
     this.paymentsById = new Map();
     this.requests = []; // creation order, oldest first
     this.requestsById = new Map();
-    this.splits = [];
-    this.settlements = [];
+    this.splits = new Map(); // id -> split
+    this.settlements = new Map(); // id -> settlement
     this.idempotency = new Map(); // scope -> { fingerprint, response }
     this.lastTimestampMs = 0;
   }
@@ -139,6 +139,14 @@ export class State {
   addRequest(request) {
     this.requests.push(request);
     this.requestsById.set(request.id, request);
+  }
+
+  addSplit(split) {
+    this.splits.set(split.id, split);
+  }
+
+  addSettlement(settlement) {
+    this.settlements.set(settlement.id, settlement);
   }
 
   // ---- idempotency records ---------------------------------------------
