@@ -26,6 +26,10 @@
   reviewer blocking: R1. Decision: another round; sent R1 (blocking) and R2, R3, R5-R10 (non-blocking) to implementer; R4 ruled no change.
 - Round 2: product d0f71b1 (stage-1 = 6fca369), suite 94de59b. Suite 553/553; probes (work/reviews/acceptance-d0f71b1.md)
   fail S1-158, S1-073, S1-024 (count 3, previous 0). Count did not fall -> loop stopped; final review on d0f71b1.
+- Final review of d0f71b1: CHANGES NEEDED, blocking 9 (R11-R16 + S1-158, S1-073, S1-024); report
+  work/reviews/review-d0f71b1-final.md (fix-commit and probe briefs/raw listed; supplied --all --mode isolated pass).
+  R1-R3, R5-R7, R9 fixed; R4 no change; R8 -> R23, R10 -> R19. Sent R11-R23 + F1/F2 to implementer; rounds continue
+  from 3 without reviewer, first compared with 9.
 
 ## Rulings
 - R4 (pay with no body is 400): no change. §5: "400 | `malformed_request` | Unparseable body"; §7: the key is resolved
