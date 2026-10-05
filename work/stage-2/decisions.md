@@ -36,6 +36,8 @@
 - Final review of 8c3360d: CHANGES NEEDED, blocking 7 (R10-R15 + S2-102); work/reviews/review-8c3360d-final.md
   (fix-commit + probe briefs/raw listed; supplied --all --mode isolated pass 1-2, fail 3, claimed 2). R1, R3-R7, R9 fixed;
   R8 history; R2 -> R10/R11. Sent R10-R23 + D12 to implementer; rounds continue from 3 without reviewer, compared with 7.
+- Round 3 started: product 61246ed (stage folders = 7c61450; stage-1/ changed in 3c0ba8f for R14 — carried-forward
+  defect fixed in every stage folder that carries it), suite ba66344 on stage-1 and stage-2; touched screens + D12.
 
 ## Rulings
 - R1 (round 1, pay form changed and changed back after a confirmed payment replays it): BLOCKING. Text: "Submitting it
