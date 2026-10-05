@@ -83,3 +83,9 @@
   every synchronous handler runs in a State transaction, so when runIdempotent refuses the Promise,
   the changes made so far are undone and no key is recorded (state.test.js). Work the Promise does
   later would still escape; no handler does this, and defineRoutes refuses async handlers.
+
+## After acceptance
+
+- R14 (found in the stage-2 final review, fixed here too): import now checks that every stored idempotency
+  receipt and request body describe the record they answered for (REPLAY_RULES in src/records.js), so an edited
+  receipt is 422 rather than a replay of a record that does not exist.
