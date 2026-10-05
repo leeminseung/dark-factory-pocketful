@@ -69,8 +69,11 @@ h2 { font-size: 20px; font-weight: 600; }
 .wordmark { font-size: 20px; font-weight: 600; color: var(--ink); text-decoration: none; }
 .who { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .who-text { display: flex; flex-direction: column; text-align: right; min-width: 0; }
-.who-name { font-weight: 600; overflow-wrap: anywhere; }
+/* One header shape for every user (design.md §3): name and handle one line each, never wrapping. */
+.who-name, .who-handle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who-name { font-weight: 600; }
 .who-handle { font-size: 13px; color: var(--graphite); }
+.header-row .button.text { white-space: nowrap; flex: none; }
 .nav { display: flex; gap: 24px; }
 .nav-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--graphite); text-decoration: none; border-bottom: 2px solid transparent; }
 .nav-link[aria-current="page"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--orchid); }

@@ -58,7 +58,7 @@ function header(route) {
       h('a', { href: '/', class: 'wordmark' }, 'Pocketful'),
       h('div', { class: 'who' },
         h('div', { class: 'who-text' },
-          h('span', { testid: 'current-user', class: 'who-name' }, me.display_name),
+          h('span', { testid: 'current-user', class: 'who-name', title: me.display_name }, me.display_name),
           h('span', { testid: 'current-handle', class: 'who-handle' }, me.handle)),
         h('button', { type: 'button', testid: 'logout-button', class: 'button text', onclick: signOut }, 'Log out'))),
     h('nav', { class: 'container', 'aria-label': 'Main' },
