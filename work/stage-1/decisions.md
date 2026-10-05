@@ -37,6 +37,12 @@
   the `visibility` field, not the body. Consistent with S1-059/S1-189 tests; supplied checks always send `{}` to pay.
 - R3 (decline/cancel accept an unparseable body): §5 "Unparseable body" -> 400 applies to any non-empty body that does
   not parse; an absent/empty body stays 200 (§8 defines no body; supplied test_sample.py posts decline/cancel with none).
+- Seeded paid request / `seeded` flag (implementer, round 3): no change. A fixture request may be seeded with
+  `"status"` other than pending (§4 fixture `requests[].status`), and the fixture has no payment link for it; reset must
+  make "subsequent requests must see only that fixture" (§3.3), so reset must not invent a payment. A paid request with
+  no payment is therefore a state the service itself produces, and an export holding one is not "an invalid state"
+  (§10). An edited export that marks an API-created request this way moves no money and breaks no §1 invariant
+  (sums, nonnegative, at most once). Not a failure of S1-158.
 
 ## Acceptance
 
