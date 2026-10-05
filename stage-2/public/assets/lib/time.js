@@ -3,7 +3,6 @@
 import { h } from './dom.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const two = (n) => String(n).padStart(2, '0');
 const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
   && a.getDate() === b.getDate();
@@ -19,10 +18,10 @@ export function friendlyTime(iso, now = new Date()) {
   return t.getFullYear() === now.getFullYear() ? `${day}, ${clock}` : `${day} ${t.getFullYear()}, ${clock}`;
 }
 
-/** "Fri 9 Oct, 18:00": a deadline, with its weekday. */
-export function deadline(iso) {
-  const t = new Date(iso);
-  return `${DAYS[t.getDay()]} ${t.getDate()} ${MONTHS[t.getMonth()]}, ${two(t.getHours())}:${two(t.getMinutes())}`;
+/** The same words inside a sentence: "Collect by today, 06:51" (design.md §5.6). */
+export function timeInSentence(iso, now = new Date()) {
+  const words = friendlyTime(iso, now);
+  return /^(Today|Yesterday),/.test(words) ? words[0].toLowerCase() + words.slice(1) : words;
 }
 
 /** A <time> element for `iso`, showing `text` (default: the friendly form). */

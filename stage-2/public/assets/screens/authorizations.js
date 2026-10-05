@@ -4,7 +4,7 @@ import { fill, h } from '../lib/dom.js';
 import { hatchSwatch } from '../lib/icons.js';
 import { amountHint, decimalOf, formatAmount, parseAmount } from '../lib/money.js';
 import { sentence, uncertainAbout } from '../lib/messages.js';
-import { deadline, friendlyTime } from '../lib/time.js';
+import { timeInSentence } from '../lib/time.js';
 import { LatestRead, RetryIdentity, handleText, stripLoading, button, chip, emptyState, feedback, field, loadingRows, plate } from '../lib/ui.js';
 
 export function renderAuthorizations(ctx, main) {
@@ -58,6 +58,7 @@ export function renderAuthorizations(ctx, main) {
     const open = a.status === 'open';
     const id = a.authorization_id;
     const note = state.rowNote?.id === id ? state.rowNote.el : null;
+    const payer = outgoing ? 'you' : a.from_handle; // person first: "went back to you"
     return h('li', { class: 'row', testid: `authorization-item-${id}`, data: { status: a.status } },
       plate(other, outgoing ? 'sent' : 'received', { held: open }),
       h('div', { class: 'row-main' },
@@ -66,11 +67,11 @@ export function renderAuthorizations(ctx, main) {
           h('p', { class: 'row-amount', testid: `authorization-amount-${id}` }, fmt(a.amount))),
         a.note && h('p', { class: 'row-note' }, a.note),
         open && a.captured_amount > 0 && h('p', { class: 'meta' }, `Collected so far ${fmt(a.captured_amount)}`),
-        h('p', { class: 'meta row-meta' }, chip(a.status), open && h('span', {}, `Collect by ${deadline(a.expires_at)}`)),
+        h('p', { class: 'meta row-meta' }, chip(a.status), open && h('span', {}, `Collect by ${timeInSentence(a.expires_at)}`)),
         h('p', { class: 'meta' }, 'Expires ', h('time', { datetime: a.expires_at, testid: `authorization-expires-${id}` }, a.expires_at)),
         a.status === 'captured' && h('p', { class: 'meta' }, 'Collected ', h('span', { class: 'amount-inline', testid: `authorization-captured-${id}` }, fmt(a.captured_amount))),
-        a.status === 'voided' && h('p', { class: 'meta' }, `Released. The money went back to ${a.from_handle}.`),
-        a.status === 'expired' && h('p', { class: 'meta' }, `Expired ${friendlyTime(a.expires_at)}. The money went back to ${a.from_handle}.`),
+        a.status === 'voided' && h('p', { class: 'meta' }, `Released. The money went back to ${payer}.`),
+        a.status === 'expired' && h('p', { class: 'meta' }, `Expired ${timeInSentence(a.expires_at)}. The money went back to ${payer}.`),
         open && !outgoing && captureControls(a),
         open && outgoing && h('div', { class: 'row-actions' }, voidButton(a)),
         note));
