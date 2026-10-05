@@ -1,129 +1,101 @@
-// POST /_test/reset fixtures (§3.3, §4, §11): validation and building a fresh State.
+// POST /_test/reset fixtures (§3.3, §4, §11): reading a fixture into records.
 //
-// The whole fixture is checked before anything is built, and the built State only
-// replaces the live one once complete, so a rejected fixture changes nothing.
+// This module decides only what is fixture-specific: field names, defaults, and that a
+// wrong JSON type is 400 (§5). Every value rule and every rule between records is
+// records.js's checkRecords, shared with import. The whole fixture is judged before
+// anything is built, so a rejected fixture changes nothing.
 import { invalid, malformed } from './errors.js';
 import { hashPassword } from './passwords.js';
-import { State } from './state.js';
-import {
-  BALANCE_LIMIT, MAX_ID_CHARS, isEmail, isHandle, isId, isMinorUnits, isRequestStatus,
-  isTotalWithinLimit,
-} from './model.js';
-import { amount, isPlainObject, note, visibility } from './validate.js';
+import { checkRecords, stateFromRecords } from './records.js';
+import { isPlainObject } from './validate.js';
 
 const has = (obj, name) => Object.prototype.hasOwnProperty.call(obj, name);
 
-/** Reads a field of a fixture object: a wrong JSON type is 400, a missing one 422. */
+const TYPES = {
+  string: (v) => typeof v === 'string',
+  array: Array.isArray,
+  number: (v) => typeof v === 'number',
+  any: () => true,
+};
+
+/** A fixture field: missing is 422 unless it has a default, a wrong JSON type is 400. */
 function read(obj, name, type, where, fallback) {
   if (!has(obj, name) || obj[name] === undefined) {
     if (fallback !== undefined) return fallback;
     throw invalid(`${where}.${name} is required`);
   }
-  const value = obj[name];
-  const ok = {
-    string: typeof value === 'string',
-    array: Array.isArray(value),
-    object: isPlainObject(value),
-    number: typeof value === 'number',
-  }[type];
-  if (!ok) throw malformed(`${where}.${name} must be a ${type}`);
-  return value;
+  if (!TYPES[type](obj[name])) throw malformed(`${where}.${name} must be a ${type}`);
+  return obj[name];
 }
 
-function readId(obj, name, where) {
-  const id = read(obj, name, 'string', where);
-  if (!isId(id)) throw invalid(`${where}.${name} must be 1 to ${MAX_ID_CHARS} characters`);
-  return id;
-}
-
-function readUser(raw, where) {
+function object(raw, where) {
   if (!isPlainObject(raw)) throw malformed(`${where} must be an object`);
-  const user = {
-    id: readId(raw, 'id', where),
-    email: read(raw, 'email', 'string', where),
-    password: read(raw, 'password', 'string', where),
-    displayName: read(raw, 'display_name', 'string', where),
-    handle: read(raw, 'handle', 'string', where),
-    balance: amount(raw, 'balance', { min: 0, max: BALANCE_LIMIT }),
-  };
-  if (!isEmail(user.email)) throw invalid(`${where}.email is not local@domain`);
-  if (!isHandle(user.handle)) throw invalid(`${where}.handle is not a valid handle`);
-  return user;
+  return raw;
 }
 
-function readParties(raw, fromName, toName, where, userIds) {
-  const from = readId(raw, fromName, where);
-  const to = readId(raw, toName, where);
-  if (!userIds.has(from) || !userIds.has(to)) throw invalid(`${where} names an unknown user`);
-  if (from === to) throw invalid(`${where} has the same user on both sides`);
-  return [from, to];
-}
+// Amounts, balances, notes and visibilities are not type-checked here: §5 makes a wrongly
+// typed amount, note or visibility 422, which checkRecords gives.
+const readUser = (raw, where) => ({
+  id: read(object(raw, where), 'id', 'string', where),
+  email: read(raw, 'email', 'string', where),
+  password: read(raw, 'password', 'string', where),
+  displayName: read(raw, 'display_name', 'string', where),
+  handle: read(raw, 'handle', 'string', where),
+  balance: read(raw, 'balance', 'any', where),
+});
 
-function readPayment(raw, where, userIds) {
-  if (!isPlainObject(raw)) throw malformed(`${where} must be an object`);
-  const [fromUserId, toUserId] = readParties(raw, 'from_user_id', 'to_user_id', where, userIds);
-  return {
-    id: readId(raw, 'id', where), fromUserId, toUserId,
-    amount: amount(raw, 'amount', { min: 0 }), note: note(raw), visibility: visibility(raw),
-    // The fixture format has no link fields (§4): seeded records start unlinked.
-    requestId: null, settlementId: null,
-  };
-}
+// The fixture format has no link fields (§4): seeded records start unlinked.
+const readPayment = (raw, where, createdAt) => ({
+  id: read(object(raw, where), 'id', 'string', where),
+  fromUserId: read(raw, 'from_user_id', 'string', where),
+  toUserId: read(raw, 'to_user_id', 'string', where),
+  amount: read(raw, 'amount', 'any', where),
+  note: read(raw, 'note', 'any', where, ''),
+  visibility: read(raw, 'visibility', 'any', where, 'public'),
+  requestId: null,
+  settlementId: null,
+  createdAt,
+});
 
-function readRequest(raw, where, userIds) {
-  if (!isPlainObject(raw)) throw malformed(`${where} must be an object`);
-  const [requesterId, payerId] = readParties(raw, 'requester_id', 'payer_id', where, userIds);
-  const status = has(raw, 'status') ? raw.status : 'pending';
-  if (!isRequestStatus(status)) throw invalid(`${where}.status is invalid`);
-  return {
-    id: readId(raw, 'id', where), requesterId, payerId,
-    amount: amount(raw, 'amount', { min: 0 }), note: note(raw), status, paymentId: null,
-  };
-}
+const readRequest = (raw, where, createdAt) => ({
+  id: read(object(raw, where), 'id', 'string', where),
+  requesterId: read(raw, 'requester_id', 'string', where),
+  payerId: read(raw, 'payer_id', 'string', where),
+  amount: read(raw, 'amount', 'any', where),
+  note: read(raw, 'note', 'any', where, ''),
+  status: read(raw, 'status', 'any', where, 'pending'),
+  paymentId: null,
+  createdAt,
+});
 
-function requireUnique(values, what) {
-  if (new Set(values).size !== values.length) throw invalid(`duplicate ${what} in fixture`);
-}
-
-/** Checks a fixture completely and returns its parsed parts; throws 400/422 on any defect. */
+/** Reads and judges a fixture; returns its records, users still holding plaintext passwords. */
 export function parseFixture(body) {
-  const currency = read(body, 'currency', 'string', 'fixture');
-  if (currency === '') throw invalid('fixture.currency is empty');
-  const minorUnits = read(body, 'minor_units', 'number', 'fixture');
-  if (!isMinorUnits(minorUnits)) throw invalid('fixture.minor_units must be 0, 2 or 3');
-
-  const users = read(body, 'users', 'array', 'fixture').map((u, i) => readUser(u, `users[${i}]`));
-  requireUnique(users.map((u) => u.id), 'user id');
-  requireUnique(users.map((u) => u.email.toLowerCase()), 'email');
-  requireUnique(users.map((u) => u.handle), 'handle');
-  if (!isTotalWithinLimit(users.map((u) => u.balance))) {
-    throw invalid('seeded balances exceed 2^53 in total');
-  }
-  const userIds = new Set(users.map((u) => u.id));
-
-  const payments = read(body, 'payments', 'array', 'fixture', [])
-    .map((p, i) => readPayment(p, `payments[${i}]`, userIds));
-  requireUnique(payments.map((p) => p.id), 'payment id');
-  const requests = read(body, 'requests', 'array', 'fixture', [])
-    .map((r, i) => readRequest(r, `requests[${i}]`, userIds));
-  requireUnique(requests.map((r) => r.id), 'request id');
-
+  // Seeded payments and requests all get the reset time; a later entry counts as newer.
+  const now = Date.now();
   const operatorIds = read(body, 'settlement_operator_ids', 'array', 'fixture', []);
-  for (const id of operatorIds) {
-    if (typeof id !== 'string') throw malformed('settlement_operator_ids must hold strings');
-    if (!userIds.has(id)) throw invalid(`settlement operator ${id} is not a seeded user`);
+  if (!operatorIds.every((id) => typeof id === 'string')) {
+    throw malformed('settlement_operator_ids must hold strings');
   }
-  return { currency, minorUnits, users, payments, requests, operatorIds };
+  const records = {
+    currency: read(body, 'currency', 'string', 'fixture'),
+    minorUnits: read(body, 'minor_units', 'number', 'fixture'),
+    lastTimestampMs: now,
+    users: read(body, 'users', 'array', 'fixture').map((u, i) => readUser(u, `users[${i}]`)),
+    operatorIds,
+    tokens: [],
+    payments: read(body, 'payments', 'array', 'fixture', []).map((p, i) => readPayment(p, `payments[${i}]`, now)),
+    requests: read(body, 'requests', 'array', 'fixture', []).map((r, i) => readRequest(r, `requests[${i}]`, now)),
+    splits: [],
+    settlements: [],
+    idempotency: [],
+  };
+  checkRecords(records);
+  return records;
 }
 
-/** Builds a fresh State from a parsed fixture. Seeded balances are taken as already net. */
-export async function buildState(fixture) {
-  const state = new State({ currency: fixture.currency, minorUnits: fixture.minorUnits });
-  const hashes = await Promise.all(fixture.users.map((u) => hashPassword(u.password)));
-  fixture.users.forEach(({ password, ...user }, i) => state.addUser({ ...user, passwordHash: hashes[i] }));
-  for (const id of fixture.operatorIds) state.operatorIds.add(id);
-  const createdAt = state.nextTimestamp();
-  for (const payment of fixture.payments) state.addPayment({ ...payment, createdAt });
-  for (const request of fixture.requests) state.addRequest({ ...request, createdAt });
-  return state;
+/** Builds a fresh State from parsed fixture records. Seeded balances are taken as already net. */
+export async function buildState(records) {
+  const hashes = await Promise.all(records.users.map((u) => hashPassword(u.password)));
+  const users = records.users.map(({ password, ...user }, i) => ({ ...user, passwordHash: hashes[i] }));
+  return stateFromRecords({ ...records, users });
 }
