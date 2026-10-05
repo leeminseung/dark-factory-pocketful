@@ -141,9 +141,9 @@ select.input { appearance: auto; }
 .bar.bar-empty { background: transparent; box-shadow: inset 0 0 0 1px var(--lining-soft); }
 .bar.bar-empty > span { display: none; }
 .refresh-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.hatch-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; flex: none;
-  background: var(--hatch-on-paper); border: 1px solid var(--lining); }
-.plum-panel .hatch-swatch, .plum-strip .hatch-swatch { background: var(--hatch-on-plum); border-color: var(--lining-soft); }
+.hatch-swatch { display: inline-flex; width: 12px; height: 12px; flex: none; color: var(--lining); }
+.hatch-swatch svg { width: 12px; height: 12px; }
+.plum-panel .hatch-swatch, .plum-strip .hatch-swatch { color: var(--lining-soft); }
 @media (min-width: 960px) {
   .balance { display: grid; grid-template-columns: 1fr 1fr; column-gap: 32px; align-items: end; }
   .balance .figures { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; align-items: end; }

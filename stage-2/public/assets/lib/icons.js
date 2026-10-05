@@ -28,5 +28,15 @@ export function icon(name, className = '') {
   });
 }
 
-/** The 12 px hatch swatch that marks held money, and nothing else (design.md §1). */
-export const hatchSwatch = () => h('span', { class: 'hatch-swatch', 'aria-hidden': 'true' });
+/**
+ * The 12 px hatch swatch that marks held money, and nothing else (design.md §1): four parallel
+ * 45° lines in an outlined square, so it never reads as the Declined slash (§5.1).
+ */
+export const hatchSwatch = () => h('span', {
+  class: 'hatch-swatch',
+  'aria-hidden': 'true',
+  html: '<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor">'
+    + '<rect x="0.5" y="0.5" width="11" height="11" rx="1.5" stroke-width="1"/>'
+    + '<path d="M0.5 4.5l4-4M0.5 8.5l8-8M3.5 11.5l8-8M7.5 11.5l4-4" stroke-width="1.1" stroke-linecap="round"/>'
+    + '</svg>',
+});
