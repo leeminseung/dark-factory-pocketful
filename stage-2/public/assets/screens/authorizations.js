@@ -28,7 +28,7 @@ export function renderAuthorizations(ctx, main) {
     const res = await api('GET', `/authorizations?limit=${LIST_LIMIT}`);
     if (!ctx.view.alive) return;
     if (!res.ok) {
-      fill(body, feedback('refused', null, "Couldn't load reserved money. Try again in a moment."));
+      if (reads.isLatest(seq)) fill(body, feedback('refused', null, "Couldn't load reserved money. Try again in a moment."));
       return;
     }
     if (!reads.accept(seq)) return;
