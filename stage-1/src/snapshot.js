@@ -30,7 +30,8 @@ export function exportState(state) {
     })),
     requests: state.requests.map((r) => ({
       id: r.id, requester_id: r.requesterId, payer_id: r.payerId, amount: r.amount,
-      note: r.note, status: r.status, payment_id: r.paymentId, created_at_ms: r.createdAt,
+      note: r.note, status: r.status, payment_id: r.paymentId, seeded: r.seeded,
+      created_at_ms: r.createdAt,
     })),
     splits: [...state.splits.values()].map((sp) => ({
       id: sp.id, requester_id: sp.requesterId, amount: sp.amount, note: sp.note,
@@ -81,7 +82,8 @@ export function importState(envelope) {
     })),
     requests: list(s, 'requests').map((r) => ({
       id: r.id, requesterId: r.requester_id, payerId: r.payer_id, amount: r.amount,
-      note: r.note, status: r.status, paymentId: r.payment_id, createdAt: r.created_at_ms,
+      note: r.note, status: r.status, paymentId: r.payment_id, seeded: r.seeded,
+      createdAt: r.created_at_ms,
     })),
     splits: list(s, 'splits').map((sp) => ({
       id: sp.id, requesterId: sp.requester_id, amount: sp.amount, note: sp.note,

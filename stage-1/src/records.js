@@ -6,11 +6,12 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  isBalance, isEmail, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, isBalance, isEmail, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { State } from './state.js';
-import { isPlainObject } from './validate.js';
+import { canonicalJson, parseJson } from './json.js';
+import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
 
 /*
  * Records (camelCase, as State holds them):
@@ -19,7 +20,8 @@ import { isPlainObject } from './validate.js';
  *   operatorIds:  [userId]
  *   tokens:       [{ token, userId }]
  *   payments:     { id, fromUserId, toUserId, amount, note, visibility, requestId, settlementId, createdAt }
- *   requests:     { id, requesterId, payerId, amount, note, status, paymentId, createdAt }
+ *   requests:     { id, requesterId, payerId, amount, note, status, paymentId, seeded, createdAt }
+ *                 (seeded: came from a fixture, which may say `paid` without naming a payment)
  *   splits:       { id, requesterId, amount, note, shares: [{ handle, amount }], requestIds, createdAt }
  *   settlements:  { id, committedAt, paymentIds }
  *   idempotency:  [{ scope, fingerprint, response }]
@@ -58,7 +60,8 @@ export function checkRecords(r) {
   const parties = (a, b, at) => check(isUser(a) && isUser(b) && a !== b, `${at} needs two different known users`);
 
   check(r.operatorIds.every(isUser), 'a settlement operator is not a known user');
-  r.tokens.forEach((t, i) => check(typeof t.token === 'string' && isUser(t.userId), `tokens[${i}] is invalid`));
+  r.tokens.forEach((t, i) => check(typeof t.token === 'string' && t.token !== '' && isUser(t.userId), `tokens[${i}] is invalid`));
+  requireUnique(r.tokens.map((t) => t.token), 'token');
 
   r.payments.forEach((p, i) => {
     const at = `payments[${i}]`;
@@ -80,6 +83,7 @@ export function checkRecords(r) {
     check(isNote(q.note), `${at}.note is invalid`);
     check(isRequestStatus(q.status), `${at}.status is invalid`);
     check(isOptionalId(q.paymentId) && isTimestampMs(q.createdAt), `${at} fields are invalid`);
+    check(typeof q.seeded === 'boolean', `${at}.seeded must be a boolean`);
   });
   requireUnique(r.requests.map((q) => q.id), 'request id');
   const requestIds = new Set(r.requests.map((q) => q.id));
@@ -102,9 +106,97 @@ export function checkRecords(r) {
   requireUnique(r.settlements.map((st) => st.id), 'settlement id');
 
   r.idempotency.forEach((rec, i) => {
-    check(typeof rec.scope === 'string' && typeof rec.fingerprint === 'string', `idempotency[${i}] is invalid`);
-    check(isPlainObject(rec.response) && isPlainObject(rec.response.body), `idempotency[${i}].response is invalid`);
+    check(isIdempotencyScope(rec.scope, isUser), `idempotency[${i}].scope is invalid`);
+    check(isCanonicalObjectText(rec.fingerprint), `idempotency[${i}].fingerprint is invalid`);
+    check(isPlainObject(rec.response) && rec.response.status === 201 && isPlainObject(rec.response.body),
+      `idempotency[${i}].response is invalid`);
   });
+  requireUnique(r.idempotency.map((rec) => rec.scope), 'idempotency scope');
+
+  checkLinks(r);
+}
+
+/** JSON text of an object, already in the canonical form runIdempotent writes. */
+function isCanonicalObjectText(text) {
+  if (typeof text !== 'string') return false;
+  try {
+    const value = parseJson(text);
+    return isPlainObject(value) && canonicalJson(value) === text;
+  } catch {
+    return false;
+  }
+}
+
+/** A scope as runIdempotent writes it: [userId, method, route, params, key], canonical. */
+function isIdempotencyScope(scope, isUser) {
+  if (!isCanonicalArrayText(scope)) return false;
+  const parts = JSON.parse(scope);
+  if (parts.length !== 5) return false;
+  const [userId, method, route, params, key] = parts;
+  return isUser(userId) && typeof method === 'string' && typeof route === 'string'
+    && isPlainObject(params) && Object.values(params).every((v) => typeof v === 'string')
+    && typeof key === 'string' && key !== '' && charCount(key) <= MAX_IDEMPOTENCY_KEY_CHARS;
+}
+
+function isCanonicalArrayText(text) {
+  if (typeof text !== 'string') return false;
+  try {
+    const value = parseJson(text);
+    return Array.isArray(value) && canonicalJson(value) === text;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Rules between records: every link names a record that links back, so a request can be
+ * paid at most once (§1), a split's shares sum to its amount and match its requests (§8),
+ * and a settlement and its members name each other with one commit time (§11).
+ */
+function checkLinks(r) {
+  const users = new Map(r.users.map((u) => [u.id, u]));
+  const payments = new Map(r.payments.map((p) => [p.id, p]));
+  const requests = new Map(r.requests.map((q) => [q.id, q]));
+  const settlements = new Map(r.settlements.map((st) => [st.id, st]));
+
+  for (const p of r.payments) {
+    if (p.requestId !== null) {
+      const q = requests.get(p.requestId);
+      check(q && q.status === 'paid' && q.paymentId === p.id && q.payerId === p.fromUserId
+        && q.requesterId === p.toUserId && q.amount === p.amount, `payment ${p.id} names a request that is not paid by it`);
+    }
+    if (p.settlementId !== null) {
+      const st = settlements.get(p.settlementId);
+      check(st && st.paymentIds.includes(p.id) && st.committedAt === p.createdAt && p.requestId === null,
+        `payment ${p.id} names a settlement it is not a member of`);
+    }
+  }
+  for (const q of r.requests) {
+    if (q.paymentId !== null) {
+      check(q.status === 'paid' && payments.get(q.paymentId)?.requestId === q.id,
+        `request ${q.id} names a payment that did not pay it`);
+    } else {
+      check(q.status !== 'paid' || q.seeded, `request ${q.id} is paid but names no payment`);
+    }
+  }
+  for (const st of r.settlements) {
+    check(st.paymentIds.length > 0 && new Set(st.paymentIds).size === st.paymentIds.length
+      && st.paymentIds.every((id) => payments.get(id).settlementId === st.id),
+      `settlement ${st.id} members do not name it`);
+  }
+  for (const sp of r.splits) {
+    const requester = users.get(sp.requesterId);
+    const total = sp.shares.reduce((sum, share) => sum + share.amount, 0);
+    const handles = sp.shares.map((share) => share.handle);
+    const others = sp.shares.filter((share) => share.handle !== requester.handle);
+    const matches = others.length === sp.requestIds.length && others.every((share, i) => {
+      const q = requests.get(sp.requestIds[i]);
+      return q.requesterId === sp.requesterId && users.get(q.payerId).handle === share.handle
+        && q.amount === share.amount;
+    });
+    check(sp.shares.length > 0 && total === sp.amount && new Set(handles).size === handles.length && matches,
+      `split ${sp.id} shares do not match its amount and requests`);
+  }
 }
 
 /** Builds a State from records that passed checkRecords; every user must have a passwordHash. */

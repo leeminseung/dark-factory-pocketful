@@ -18,6 +18,7 @@ export function addPendingRequest(state, { requester, payer, amount: value, note
     note: text,
     status: 'pending',
     paymentId: null,
+    seeded: false,
     createdAt,
   };
   state.addRequest(request);

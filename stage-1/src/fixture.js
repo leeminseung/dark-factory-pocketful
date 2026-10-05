@@ -65,6 +65,7 @@ const readRequest = (raw, where, createdAt) => ({
   note: read(raw, 'note', 'any', where, ''),
   status: read(raw, 'status', 'any', where, 'pending'),
   paymentId: null,
+  seeded: true,
   createdAt,
 });
 

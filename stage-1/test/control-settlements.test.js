@@ -250,3 +250,45 @@ test('R11 S1-158 S1-024: an import with a timestamp that has no RFC 3339 form is
   assert.equal((await w.ada.post('/payments', { to_handle: 'bob', amount: 1 }, newKey())).status, 201, 'still serving');
   assert.equal((await w.bob.get('/activity')).status, 200);
 });
+
+test('R12 S1-158 S1-003 S1-134 S1-182: an import whose records contradict each other is 422', async () => {
+  const w = await world(srv.base, fixture({
+    settlement_operator_ids: ['u_ada'],
+    requests: [{ id: 'rq_seed', requester_id: 'u_bob', payer_id: 'u_ada', amount: 5, note: '', status: 'paid' }],
+  }));
+  const asked = (await w.bob.post('/requests', { payer_handle: 'ada', amount: 7, note: '' }, newKey())).body;
+  const payment = (await w.ada.post(`/requests/${asked.request_id}/pay`, {}, newKey())).body;
+  const pending = (await w.bob.post('/requests', { payer_handle: 'ada', amount: 3, note: '' }, newKey())).body;
+  await w.ada.post('/splits', { amount: 10, participant_handles: ['ada', 'bob', 'cy'], note: '' }, newKey());
+  await w.ada.post('/settlements', { transfers: [{ from_handle: 'bob', to_handle: 'cy', amount: 1 },
+    { from_handle: 'cy', to_handle: 'bob', amount: 1 }] }, newKey());
+  const good = await exportState();
+  const s = good.state;
+  const change = (name, pick, over) => ({
+    ...good, state: { ...s, [name]: s[name].map((x) => (pick(x) ? { ...x, ...over } : x)) },
+  });
+  const isPaid = (r) => r.id === asked.request_id;
+  const isMember = (p) => p.settlement_id !== null;
+  const bad = {
+    'paid request set back to pending': change('requests', isPaid, { status: 'pending' }),
+    'paid request without its payment': change('requests', isPaid, { payment_id: null }),
+    'paid request naming no payment': change('requests', isPaid, { payment_id: 'p_ghost' }),
+    'pending request carrying a payment': change('requests', (r) => r.id === pending.request_id, { payment_id: payment.payment_id }),
+    'payment naming no request': change('payments', (p) => p.id === payment.payment_id, { request_id: 'rq_ghost' }),
+    'split shares not summing to amount': change('splits', () => true, { shares: s.splits[0].shares.map((x, i) => (i === 0 ? { ...x, amount: 5 } : x)) }),
+    'split naming an unrelated request': change('splits', () => true, { request_ids: [pending.request_id, s.splits[0].request_ids[1]] }),
+    'payment naming no settlement': change('payments', isMember, { settlement_id: 'st_ghost' }),
+    'settlement member unlinked': change('payments', (p) => p.id === s.settlements[0].payment_ids[0], { settlement_id: null }),
+    'idempotency scope not JSON': change('idempotency', (r, i) => r === s.idempotency[0], { scope: 'not json' }),
+    'idempotency fingerprint not JSON': change('idempotency', (r) => r === s.idempotency[0], { fingerprint: 'garbage' }),
+    'idempotency response not 201': change('idempotency', (r) => r === s.idempotency[0], { response: { ...s.idempotency[0].response, status: 500 } }),
+    'duplicate idempotency scope': { ...good, state: { ...s, idempotency: [...s.idempotency, s.idempotency[0]] } },
+    'duplicate token': { ...good, state: { ...s, tokens: [...s.tokens, s.tokens[0]] } },
+    'empty token': { ...good, state: { ...s, tokens: [...s.tokens, { token: '', user_id: 'u_ada' }] } },
+  };
+  for (const [label, envelope] of Object.entries(bad)) {
+    expectError(await importState(envelope), 422, 'validation_failed', label);
+  }
+  assert.equal((await importState(good)).status, 204, 'the unchanged export, seeded paid request included, imports');
+  expectError(await w.ada.post(`/requests/${asked.request_id}/pay`, {}, newKey()), 409, 'request_not_pending');
+});
