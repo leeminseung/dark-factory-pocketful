@@ -75,8 +75,10 @@ async function dispatch(req) {
   const context = { state, user, body, params, query: url.searchParams };
 
   if (!route.idempotent) return route.handler(context);
+  // The endpoint is the matched route and its decoded parameters, not the raw spelling:
+  // `/payments/` and `/requests/rq%5F1/pay` are the same paths as `/payments` and `/requests/rq_1/pay`.
   return runIdempotent(state, {
-    userId: user.id, method: req.method, path: url.pathname, key, body,
+    userId: user.id, method: req.method, route: route.path, params, key, body,
   }, () => route.handler(context));
 }
 

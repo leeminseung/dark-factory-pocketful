@@ -150,3 +150,22 @@ test('split validation', async () => {
   }
   assert.deepEqual((await w.bob.get('/requests')).body.requests, []);
 });
+
+test('R2 S1-088: one endpoint spelled differently is still the same path for a key', async () => {
+  const w = await world(srv.base, fixture({
+    requests: [{ id: 'rq_1', requester_id: 'u_bob', payer_id: 'u_ada', amount: 100, note: '', status: 'pending' }],
+  }));
+  const key = newKey();
+  const first = await w.ada.post('/payments', { to_handle: 'bob', amount: 10 }, key);
+  const slash = await w.ada.post('/payments/', { to_handle: 'bob', amount: 10 }, key);
+  assert.deepEqual([slash.status, slash.body], [200, first.body]);
+  assert.equal(await w.ada.balance(), 9_990, 'money moved once');
+
+  const payKey = newKey();
+  const paid = await w.ada.post('/requests/rq_1/pay', {}, payKey);
+  assert.equal(paid.status, 201);
+  for (const spelling of ['/requests/rq%5F1/pay', '/requests/rq_1/pay/']) {
+    const again = await w.ada.post(spelling, {}, payKey);
+    assert.deepEqual([again.status, again.body], [200, paid.body], spelling);
+  }
+});

@@ -1,6 +1,6 @@
 // Idempotent write paths (§7).
 //
-// A key belongs to one user on one method and path. The first successful use stores
+// A key belongs to one user on one method and path (route plus decoded parameters). The first successful use stores
 // the request's canonical body and its 201 response; a replay with the same body gets
 // that response again as 200, and a different body is 409. A failed attempt stores
 // nothing, so its key stays usable.
@@ -54,8 +54,8 @@ export function canonicalJson(root) {
  * `operation` must be synchronous: the lookup, the state change and the record are one
  * uninterrupted step, so concurrent identical requests produce exactly one 201.
  */
-export function runIdempotent(state, { userId, method, path, key, body }, operation) {
-  const scope = JSON.stringify([userId, method, path, key]);
+export function runIdempotent(state, { userId, method, route, params, key, body }, operation) {
+  const scope = canonicalJson([userId, method, route, params, key]);
   const fingerprint = canonicalJson(body);
   const record = state.idempotencyRecord(scope);
   if (record) {
