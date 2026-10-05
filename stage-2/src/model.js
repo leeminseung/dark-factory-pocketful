@@ -55,6 +55,11 @@ export const expiryOf = (createdAt, ttlSeconds) => Math.min(createdAt + ttlSecon
  */
 export const isTtlSeconds = (value, now = Date.now()) =>
   isIntegerIn(value, 1, Math.floor((MAX_TIMESTAMP_MS - now) / 1000));
+/** An authorization whose expires_at is at or before `now` has expired (stage 2). */
+export const isDue = (authorization, now) => authorization.expiresAt <= now;
+/** What an authorization still holds: amount − captured while open, zero once closed. */
+export const remainingOf = (authorization) =>
+  (authorization.status === 'open' ? authorization.amount - authorization.capturedAmount : 0);
 export const isMinorUnits = (value) => MINOR_UNITS.includes(value);
 export const isTotalWithinLimit = (balances) =>
   balances.reduce((sum, balance) => sum + balance, 0) <= BALANCE_LIMIT;

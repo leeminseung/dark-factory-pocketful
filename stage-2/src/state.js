@@ -16,7 +16,9 @@ import {
   authorizationExpired, authorizationNotOpen, captureExceedsAuthorization, insufficientFunds,
   requestNotPending,
 } from './errors.js';
-import { DEFAULT_AUTHORIZATION_TTL_SECONDS, TERMINAL_STATUSES, expiryOf } from './model.js';
+import {
+  DEFAULT_AUTHORIZATION_TTL_SECONDS, TERMINAL_STATUSES, expiryOf, isDue, remainingOf,
+} from './model.js';
 
 export class State {
   constructor({ currency, minorUnits, authorizationTtlSeconds = DEFAULT_AUTHORIZATION_TTL_SECONDS }) {
@@ -191,9 +193,9 @@ export class State {
 
   // ---- holds and authorizations ----------------------------------------
 
-  /** The amount an authorization still holds: zero once it is closed. */
+  /** The amount an authorization still holds: zero once it is closed (model.js). */
   remainingOf(authorization) {
-    return authorization.status === 'open' ? authorization.amount - authorization.capturedAmount : 0;
+    return remainingOf(authorization);
   }
 
   /** The sum of the user's open holds. */
@@ -211,7 +213,7 @@ export class State {
   /** Closes every open authorization whose expires_at is at or before `now`, releasing its remainder. */
   expireDue(now) {
     for (const a of this.openAuthorizations) {
-      if (a.expiresAt <= now) this.setAuthorizationStatus(a, 'expired');
+      if (isDue(a, now)) this.setAuthorizationStatus(a, 'expired');
     }
   }
 

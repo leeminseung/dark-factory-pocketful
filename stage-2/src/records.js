@@ -6,7 +6,7 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, isAuthorizationStatus, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, isAuthorizationStatus, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { State } from './state.js';
@@ -144,8 +144,8 @@ function checkHolds(r) {
   const now = Date.now();
   const held = new Map();
   for (const a of r.authorizations) {
-    if (a.status === 'open' && a.expiresAt > now) {
-      held.set(a.fromUserId, (held.get(a.fromUserId) ?? 0) + a.amount - a.capturedAmount);
+    if (!isDue(a, now)) {
+      held.set(a.fromUserId, (held.get(a.fromUserId) ?? 0) + remainingOf(a));
     }
   }
   for (const u of r.users) {
