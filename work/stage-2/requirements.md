@@ -258,6 +258,15 @@ stage-2 behaviour; their stage-1 tests still hold because they only run with no 
 | S2-157 | "Concurrent requests must produce the same results as executing them one at a time in some order, and the requirements above hold at every read." | concurrency | test_fixture_import.py::test_capture_and_void_race<br>test_fixture_import.py::test_concurrent_authorize_and_pay_never_overdraw<br>test_fixture_import.py::test_concurrent_partial_captures_never_exceed | tested |
 | S2-158 | §10 continues to apply to the new state: export/import preserves authorisations (status, amounts, captures, `expires_at`), holds and the capture/authorize idempotency records; invalid states (incl. holds above balances, contradictory capture links) are 422 | import | test_fixture_import.py::test_authorizations_survive_import_into_a_fresh_container<br>test_fixture_import.py::test_edited_authorization_amount_below_captured<br>test_fixture_import.py::test_edited_authorization_status<br>test_fixture_import.py::test_edited_balance<br>test_fixture_import.py::test_edited_capture_link_to_missing_authorization<br>test_fixture_import.py::test_edited_hold_above_balance<br>test_fixture_import.py::test_edited_id_too_long<br>test_fixture_import.py::test_edited_paid_request_back_to_pending<br>test_fixture_import.py::test_edited_payment_amount<br>test_fixture_import.py::test_edited_timestamps<br>test_fixture_import.py::test_expiry_continues_after_import<br>test_fixture_import.py::test_round_trip_preserves_authorizations<br>test_fixture_import.py::test_unedited_base_imports | tested |
 
+## Rows added after review (coordinator, stage 2)
+
+| ID | Quote | Area | Tests | Status |
+|---|---|---|---|---|
+| S2-165 | "404 \| `not_found` \| No such resource" (stage-1 §5) — `POST /authorizations/{id}/void` on an unknown authorisation | void | | open |
+| S2-166 | "`status` is one of the four statuses"; "`limit`, `offset` and `has_more` behave exactly as on `GET /requests`" — on `GET /authorizations` an unknown `direction` or `status`, or a `limit`/`offset` out of range or not plain decimal digits, is 422 `validation_failed` | list auths | | open |
+| S2-167 | D3 with S2-094 as the model ("changing nothing"): a seeded authorisation with an unknown or equal `from_user_id`/`to_user_id`, an `amount` outside 1..1000000000 or not an integer, a `status` outside the four, a missing or non-RFC 3339 `expires_at`, a note over 200 characters, a bad visibility, or a duplicate id is a reset error, 422 `validation_failed`, nothing changed; the same rules apply on import (S2-158) | fixture | | open |
+| S2-168 | S2-078 / S2-158 / S2-090: a stage-1 export imported into stage 2 gets `authorization_ttl_seconds` 600 and no authorisations; a stage-2 export/import keeps the fixture's `authorization_ttl_seconds` for authorisations created after the import | upgrade | | open |
+
 ## Decisions (test-designer, stage 2)
 
 Stage-1 decisions D1–D12 still apply.
