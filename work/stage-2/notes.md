@@ -18,7 +18,7 @@ Stage 1's notes (work/stage-1/notes.md) still apply to everything stage 2 did no
   and writes (capture → 409 `authorization_expired`).
 - **Fixed time bounds** (ruling 2abb370; model.js):
   - `MAX_TTL_SECONDS = 3155760000`, which is 100 years of 365.25 days.
-  - `MAX_CLOCK_MS = 9999-12-31T23:59:59.999Z − MAX_TTL_SECONDS`, which is 9899-12-31T23:59:59.999Z (epoch
+  - `MAX_CLOCK_MS = 9999-12-31T23:59:59.999Z − MAX_TTL_SECONDS`, which is 9899-12-30T23:59:59.999Z (epoch
     ms 250246540799999). It bounds the service's clock (`last_timestamp_ms`).
   - Reset and import refuse a ttl above MAX_TTL_SECONDS, or a clock above MAX_CLOCK_MS, with 422.
   - `expires_at = created_at + ttl` exactly, never clamped. The latest creation plus the longest ttl is
