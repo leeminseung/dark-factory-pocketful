@@ -1,7 +1,8 @@
 // POST /auth/signup, POST /auth/login (§6) and GET /me (§8).
 import { emailTaken, handleTaken, invalid, unauthenticated } from '../errors.js';
 import { hashPassword, verifyNothing, verifyPassword } from '../passwords.js';
-import { EMAIL_PATTERN, charCount, requiredString } from '../validate.js';
+import { charCount, isEmail } from '../model.js';
+import { requiredString } from '../validate.js';
 import { meView, sessionView } from '../views.js';
 
 const MIN_PASSWORD_CHARS = 8;
@@ -21,7 +22,7 @@ export async function signup({ state, body }) {
   const email = requiredString(body, 'email');
   const password = requiredString(body, 'password');
   const displayName = requiredString(body, 'display_name');
-  if (!EMAIL_PATTERN.test(email)) throw invalid('email must be of the form local@domain');
+  if (!isEmail(email)) throw invalid('email must be of the form local@domain');
   if (charCount(password) < MIN_PASSWORD_CHARS) {
     throw invalid(`password must be at least ${MIN_PASSWORD_CHARS} characters`);
   }

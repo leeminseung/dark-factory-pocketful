@@ -1,7 +1,7 @@
 // Money requests (§4, §8): create, pay, decline, cancel, list.
 import { forbidden, notFound, requestNotPending, selfRequest } from '../errors.js';
 import { paginate, paging, queryChoice } from '../paging.js';
-import { REQUEST_STATUSES } from '../fixture.js';
+import { REQUEST_STATUSES } from '../model.js';
 import { amount, note, requiredString, visibility } from '../validate.js';
 import { paymentView, requestView } from '../views.js';
 

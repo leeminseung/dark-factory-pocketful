@@ -5,10 +5,11 @@
 import { invalid } from './errors.js';
 import { isPasswordHash } from './passwords.js';
 import { State } from './state.js';
-import { MINOR_UNITS, REQUEST_STATUSES } from './fixture.js';
 import {
-  BALANCE_LIMIT, HANDLE_PATTERN, MAX_AMOUNT, VISIBILITIES, isIntegralNumber, isPlainObject,
-} from './validate.js';
+  BALANCE_LIMIT, HANDLE_PATTERN, MAX_AMOUNT, MINOR_UNITS, REQUEST_STATUSES, VISIBILITIES,
+  isIntegralNumber,
+} from './model.js';
+import { isPlainObject } from './validate.js';
 
 export const TRACK = 'pocketful';
 export const FORMAT_VERSION = 1;

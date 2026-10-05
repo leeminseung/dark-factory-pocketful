@@ -6,12 +6,11 @@ import { invalid, malformed } from './errors.js';
 import { hashPassword } from './passwords.js';
 import { State } from './state.js';
 import {
-  BALANCE_LIMIT, EMAIL_PATTERN, HANDLE_PATTERN, amount, charCount, isPlainObject, note, visibility,
-} from './validate.js';
+  BALANCE_LIMIT, MAX_ID_CHARS, isEmail, isHandle, isId, isMinorUnits, isRequestStatus,
+  isTotalWithinLimit,
+} from './model.js';
+import { amount, isPlainObject, note, visibility } from './validate.js';
 
-export const MINOR_UNITS = [0, 2, 3];
-export const REQUEST_STATUSES = ['pending', 'paid', 'declined', 'cancelled'];
-export const MAX_ID_CHARS = 64;
 const has = (obj, name) => Object.prototype.hasOwnProperty.call(obj, name);
 
 /** Reads a field of a fixture object: a wrong JSON type is 400, a missing one 422. */
@@ -33,7 +32,7 @@ function read(obj, name, type, where, fallback) {
 
 function readId(obj, name, where) {
   const id = read(obj, name, 'string', where);
-  if (id === '' || charCount(id) > MAX_ID_CHARS) throw invalid(`${where}.${name} must be 1 to 64 characters`);
+  if (!isId(id)) throw invalid(`${where}.${name} must be 1 to ${MAX_ID_CHARS} characters`);
   return id;
 }
 
@@ -52,8 +51,8 @@ function readUser(raw, where) {
     handle: read(raw, 'handle', 'string', where),
     balance: amount(raw, 'balance', { min: 0, max: BALANCE_LIMIT }),
   };
-  if (!EMAIL_PATTERN.test(user.email)) throw invalid(`${where}.email is not local@domain`);
-  if (!HANDLE_PATTERN.test(user.handle)) throw invalid(`${where}.handle does not match ${HANDLE_PATTERN}`);
+  if (!isEmail(user.email)) throw invalid(`${where}.email is not local@domain`);
+  if (!isHandle(user.handle)) throw invalid(`${where}.handle is not a valid handle`);
   return user;
 }
 
@@ -79,7 +78,7 @@ function readRequest(raw, where, userIds) {
   if (!isPlainObject(raw)) throw malformed(`${where} must be an object`);
   const [requesterId, payerId] = readParties(raw, 'requester_id', 'payer_id', where, userIds);
   const status = has(raw, 'status') ? raw.status : 'pending';
-  if (!REQUEST_STATUSES.includes(status)) throw invalid(`${where}.status is invalid`);
+  if (!isRequestStatus(status)) throw invalid(`${where}.status is invalid`);
   return {
     id: readId(raw, 'id', where), requesterId, payerId,
     amount: amount(raw, 'amount', { min: 0 }), note: note(raw), status, paymentId: readOptionalRef(raw, 'payment_id', where),
@@ -95,13 +94,13 @@ export function parseFixture(body) {
   const currency = read(body, 'currency', 'string', 'fixture');
   if (currency === '') throw invalid('fixture.currency is empty');
   const minorUnits = read(body, 'minor_units', 'number', 'fixture');
-  if (!MINOR_UNITS.includes(minorUnits)) throw invalid('fixture.minor_units must be 0, 2 or 3');
+  if (!isMinorUnits(minorUnits)) throw invalid('fixture.minor_units must be 0, 2 or 3');
 
   const users = read(body, 'users', 'array', 'fixture').map((u, i) => readUser(u, `users[${i}]`));
   requireUnique(users.map((u) => u.id), 'user id');
   requireUnique(users.map((u) => u.email.toLowerCase()), 'email');
   requireUnique(users.map((u) => u.handle), 'handle');
-  if (users.reduce((sum, u) => sum + u.balance, 0) > BALANCE_LIMIT) {
+  if (!isTotalWithinLimit(users.map((u) => u.balance))) {
     throw invalid('seeded balances exceed 2^53 in total');
   }
   const userIds = new Set(users.map((u) => u.id));

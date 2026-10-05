@@ -1,22 +1,16 @@
-// Field rules shared by every endpoint (§4, §5, §7). Each rule lives here once.
+// Reading request fields (§5, §7): which error a missing, mistyped or out-of-range field gets.
+// What counts as valid is the model's decision (model.js).
 import { invalid, malformed, missingIdempotencyKey } from './errors.js';
+import {
+  MAX_AMOUNT, MAX_NOTE_CHARS, VISIBILITIES, charCount, isIntegralNumber, isVisibility,
+} from './model.js';
 
-export const MAX_AMOUNT = 1_000_000_000;
-/** §4: no balance, and so no total of balances, lies outside ±2^53. */
-export const BALANCE_LIMIT = 2 ** 53;
-export const MAX_NOTE_CHARS = 200;
 export const MAX_IDEMPOTENCY_KEY_CHARS = 255;
-export const HANDLE_PATTERN = /^[a-z0-9_]{1,20}$/;
-export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+$/; // local@domain
-export const VISIBILITIES = ['public', 'private'];
 
 const has = (body, name) => Object.prototype.hasOwnProperty.call(body, name);
 
 export const isPlainObject = (value) =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
-
-/** Characters, not UTF-16 units or bytes: an emoji counts once. */
-export const charCount = (text) => [...text].length;
 
 /** A required string field: absent is 422, any other JSON type is 400. */
 export function requiredString(body, name) {
@@ -25,9 +19,6 @@ export function requiredString(body, name) {
   if (typeof value !== 'string') throw malformed(`${name} must be a string`);
   return value;
 }
-
-/** True when `value` is a JSON number with an integral value (1000, 1000.0 and 1e3 alike). */
-export const isIntegralNumber = (value) => typeof value === 'number' && Number.isInteger(value);
 
 /**
  * An amount: any non-integer, string or boolean is 422, as is a value outside min..max.
@@ -54,7 +45,7 @@ export function note(body) {
 export function visibility(body) {
   if (!has(body, 'visibility')) return 'public';
   const value = body.visibility;
-  if (!VISIBILITIES.includes(value)) throw invalid('visibility must be public or private');
+  if (!isVisibility(value)) throw invalid(`visibility must be one of ${VISIBILITIES.join(', ')}`);
   return value;
 }
 
