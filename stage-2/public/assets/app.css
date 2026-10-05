@@ -133,6 +133,8 @@ select.input { appearance: auto; }
 .bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 16px 0; background: rgba(255, 255, 255, 0.15); }
 .bar-solid { background: var(--paper); transition: width 280ms ease-out; }
 .bar-held { background: var(--hatch-on-plum); transition: width 280ms ease-out; }
+.bar.bar-empty { background: transparent; box-shadow: inset 0 0 0 1px var(--lining-soft); }
+.bar.bar-empty > span { display: none; }
 .refresh-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .hatch-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; flex: none;
   background: var(--hatch-on-paper); border: 1px solid var(--lining); }

@@ -66,10 +66,13 @@ export function renderWallet(ctx, main) {
         held > 0 && h('div', { class: 'figure-line held-line' },
           h('dt', {}, h('a', { href: '/authorizations', class: 'held-link' }, hatchSwatch(), 'Held for others')),
           h('dd', { testid: 'wallet-held', data: { amount: String(held) } }, fmt(held)))));
-    // Decorative only: the held share of the total slides into hatch (design.md §8).
+    // Decorative only: the held share of the total slides into hatch (design.md §8). Any held
+    // amount gets at least 16 px of hatch; a zero total is an empty outlined track (§5.1).
     const heldShare = me.total > 0 ? (held / me.total) * 100 : 0;
-    bar.solid.style.width = `${100 - heldShare}%`;
-    bar.held.style.width = `${heldShare}%`;
+    const heldWidth = held > 0 ? `max(16px, ${heldShare}%)` : '0px';
+    bar.el.classList.toggle('bar-empty', me.total === 0);
+    bar.solid.style.width = `calc(100% - ${heldWidth})`;
+    bar.held.style.width = heldWidth;
   }
 
   // ---- forms ---------------------------------------------------------------
