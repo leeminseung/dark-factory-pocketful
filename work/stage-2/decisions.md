@@ -27,6 +27,8 @@
   D1-D11 non-blocking (work/reviews/design-7364e79.md). Round-1 review work/reviews/review-7364e79-round1.md (standards +
   spec briefs/raw present): R1 (ruled blocking), R2 blocking, R3-R9 non-blocking. Count 0; reviewer blocking R1, R2 ->
   round 2; sent R1-R9 and D1-D11 to implementer.
+- Round 2 started: product 8c3360d (stage-2 = 1b1322f), suite ba66344; acceptance check + screen review of touched
+  screens and D1-D11.
 
 ## Rulings
 - R1 (round 1, pay form changed and changed back after a confirmed payment replays it): BLOCKING. Text: "Submitting it
