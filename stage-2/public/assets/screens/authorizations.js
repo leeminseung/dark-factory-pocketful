@@ -18,7 +18,7 @@ export function renderAuthorizations(ctx, main) {
 
   const strip = h('section', { class: 'plum-strip', 'aria-label': 'Reserved money' });
   const status = h('div', { class: 'screen-feedback' });
-  const body = h('div', {}, loadingRows('Loading reserved money…'));
+  const body = h('div', { class: 'sections' }, loadingRows('Loading reserved money…'));
   fill(main, h('h1', { class: 'page-title' }, 'Reserved money'), strip, status, body);
 
   async function load() {

@@ -16,7 +16,7 @@ export function renderRequests(ctx, main) {
 
   const strip = h('section', { class: 'plum-strip', 'aria-label': 'Waiting for you' });
   const status = h('div', { class: 'screen-feedback' });
-  const body = h('div', {}, loadingRows('Loading requests…'));
+  const body = h('div', { class: 'sections' }, loadingRows('Loading requests…'));
   fill(main, h('h1', { class: 'page-title' }, 'Requests'), strip, status, body);
 
   async function load() {

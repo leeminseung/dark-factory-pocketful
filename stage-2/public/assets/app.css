@@ -113,6 +113,9 @@ select.input { appearance: auto; }
 
 /* ---- feedback: success, refused, uncertain ---- */
 .form-feedback, .screen-feedback { display: grid; gap: 8px; }
+.screen-feedback:empty { display: none; }
+/* Sections on a list route sit 48 px apart (design.md §2 "Section gap 48"). */
+.sections { display: grid; gap: 48px; min-width: 0; }
 .feedback { display: flex; align-items: flex-start; gap: 8px; padding: 12px; border-radius: 10px; }
 .feedback .icon { margin-top: 2px; }
 .feedback.success { color: var(--success); background: var(--success-tint); }
@@ -187,6 +190,7 @@ select.input { appearance: auto; }
 .row-note { overflow-wrap: anywhere; }
 .row-note:empty { display: block; height: 0; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.row-actions .button.text { padding-left: 0; padding-right: 0; }
 .capture { display: grid; gap: 8px; margin-top: 8px; max-width: 360px; }
 .plate { position: relative; flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--ash);
   display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; }
