@@ -72,19 +72,28 @@ const PAGE_LIMIT = 200; // the API's largest page (stage-1 §5)
 /**
  * Reads a whole list page by page until has_more is false. `fetchPage(offset, limit)` resolves to
  * { ok, items, hasMore }; any failed page fails the whole read, so a screen never shows half a list.
+ * Pages are read by offset, so a write by another client between two page reads can shift a row
+ * onto the next page too: rows are kept once, by `idOf` ("One per visible payment").
  */
-export async function collectPages(fetchPage) {
+export async function collectPages(fetchPage, idOf) {
   const items = [];
+  const seen = new Set();
   for (let offset = 0; ; offset += PAGE_LIMIT) {
     const page = await fetchPage(offset, PAGE_LIMIT);
     if (!page.ok) return { ok: false };
-    items.push(...page.items);
+    for (const item of page.items) {
+      const id = idOf(item);
+      if (!seen.has(id)) {
+        seen.add(id);
+        items.push(item);
+      }
+    }
     if (!page.hasMore) return { ok: true, items };
   }
 }
 
-/** GET a whole list endpoint (`/activity`, `/requests`, `/authorizations`); `field` names its array. */
-export const readAll = (path, field) => collectPages(async (offset, limit) => {
+/** GET a whole list endpoint; `field` names its array and `idField` each row's id. */
+export const readAll = (path, field, idField) => collectPages(async (offset, limit) => {
   const res = await api('GET', `${path}?limit=${limit}&offset=${offset}`);
   return res.ok ? { ok: true, items: res.body[field], hasMore: res.body.has_more } : { ok: false };
-});
+}, (row) => row[idField]);

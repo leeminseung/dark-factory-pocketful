@@ -185,7 +185,7 @@ export function renderWallet(ctx, main) {
   async function refresh() {
     const seq = reads.begin();
     refreshing(true);
-    const [meRes, feedRes] = await Promise.all([api('GET', '/me'), readAll('/activity', 'payments')]);
+    const [meRes, feedRes] = await Promise.all([api('GET', '/me'), readAll('/activity', 'payments', 'payment_id')]);
     if (!ctx.view.alive) return;
     if (reads.isLatest(seq)) refreshing(false);
     if (!meRes.ok || !feedRes.ok) {

@@ -21,7 +21,7 @@ export function renderRequests(ctx, main) {
 
   async function load() {
     const seq = reads.begin();
-    const [list, meRes] = await Promise.all([readAll('/requests', 'requests'), api('GET', '/me')]);
+    const [list, meRes] = await Promise.all([readAll('/requests', 'requests', 'request_id'), api('GET', '/me')]);
     if (!ctx.view.alive) return;
     if (!list.ok) {
       if (reads.isLatest(seq)) fill(body, feedback('refused', null, "Couldn't load your requests. Try again in a moment."));

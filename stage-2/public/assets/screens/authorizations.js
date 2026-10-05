@@ -23,7 +23,7 @@ export function renderAuthorizations(ctx, main) {
 
   async function load() {
     const seq = reads.begin();
-    const res = await readAll('/authorizations', 'authorizations');
+    const res = await readAll('/authorizations', 'authorizations', 'authorization_id');
     if (!ctx.view.alive) return;
     if (!res.ok) {
       if (reads.isLatest(seq)) fill(body, feedback('refused', null, "Couldn't load reserved money. Try again in a moment."));
