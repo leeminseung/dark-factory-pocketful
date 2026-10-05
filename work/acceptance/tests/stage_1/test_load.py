@@ -255,3 +255,19 @@ def test_large_fixture_resets_within_10_seconds_and_logs_in(api, control):
     assert c.balance() == 10000
     body = ok(c.get("/activity", params={"limit": 200}), 200)
     assert body["has_more"] is True
+
+
+@pytest.mark.req("S1-013", "S1-053", "S1-083")
+def test_reset_of_1000_users_with_distinct_passwords_within_10_seconds(api, control):
+    """S1-013 "10 s for `POST /_test/reset`" — the fixture format bounds no user count, so 1000
+    users who each have their own password still reset within 10 s; each logs in with that
+    password only, and the export holds no plaintext (S1-083)."""
+    users = [user(f"d{i}", 1, password=f"pw-{i}-{new_key()[:6]}") for i in range(1000)]
+    t0 = time.time()
+    ok(control.post("/_test/reset", fixture(users=users)), 204)
+    assert time.time() - t0 < 10.0, f"reset took {time.time() - t0:.2f}s"
+    last = users[-1]
+    ok(api().login(last["email"], last["password"]), 200)
+    err(api().login(last["email"], users[0]["password"]), 401, "unauthenticated")
+    text = control.get("/_test/export").text
+    assert not any(u["password"] in text for u in users[::97])
