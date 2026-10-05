@@ -225,3 +225,28 @@ test('R15 S1-025: link fields outside the fixture format are ignored by reset', 
   assert.deepEqual(listed.map((r) => [r.request_id, r.payment_id]), [['rq_2', null], ['rq_1', null]]);
   assert.equal((await w.ada.get('/activity')).body.payments[0].request_id, null);
 });
+
+test('R11 S1-158 S1-024: an import with a timestamp that has no RFC 3339 form is 422', async () => {
+  const w = await world(srv.base, fixture({ settlement_operator_ids: ['u_ada'] }));
+  await w.ada.post('/payments', { to_handle: 'bob', amount: 5 }, newKey());
+  await w.ada.post('/splits', { amount: 2, participant_handles: ['ada', 'bob'], note: '' }, newKey());
+  await w.ada.post('/settlements', { transfers: [{ from_handle: 'bob', to_handle: 'cy', amount: 1 }] }, newKey());
+  const good = await exportState();
+  const s = good.state;
+  const edit = (name, i, over) => ({ ...good, state: { ...s, [name]: s[name].map((x, j) => (j === i ? { ...x, ...over } : x)) } });
+  const bad = {
+    'last_timestamp_ms 1e20': { ...good, state: { ...s, last_timestamp_ms: 1e20 } },
+    'last_timestamp_ms year 10000': { ...good, state: { ...s, last_timestamp_ms: 253402300800000 } },
+    'payment created 1e20': edit('payments', 0, { created_at_ms: 1e20 }),
+    'payment created year 10000': edit('payments', 0, { created_at_ms: 253402300800000 }),
+    'payment created 8.64e15': edit('payments', 0, { created_at_ms: 8.64e15 }),
+    'request created 1e20': edit('requests', 0, { created_at_ms: 1e20 }),
+    'split created 1e20': edit('splits', 0, { created_at_ms: 1e20 }),
+    'settlement committed 1e20': edit('settlements', 0, { committed_at_ms: 1e20 }),
+  };
+  for (const [label, envelope] of Object.entries(bad)) {
+    expectError(await importState(envelope), 422, 'validation_failed', label);
+  }
+  assert.equal((await w.ada.post('/payments', { to_handle: 'bob', amount: 1 }, newKey())).status, 201, 'still serving');
+  assert.equal((await w.bob.get('/activity')).status, 200);
+});

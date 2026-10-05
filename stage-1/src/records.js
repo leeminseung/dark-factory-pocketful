@@ -7,7 +7,7 @@
 import { invalid } from './errors.js';
 import {
   isBalance, isEmail, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
-  isTotalWithinLimit, isVisibility, isIntegralNumber,
+  isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { State } from './state.js';
 import { isPlainObject } from './validate.js';
@@ -29,7 +29,6 @@ function check(condition, message) {
   if (!condition) throw invalid(message);
 }
 
-const isCount = (v) => isIntegralNumber(v) && v >= 0;
 const isOptionalId = (v) => v === null || isId(v);
 const isList = (v, item) => Array.isArray(v) && v.every(item);
 
@@ -41,7 +40,7 @@ function requireUnique(values, what) {
 export function checkRecords(r) {
   check(typeof r.currency === 'string' && r.currency !== '', 'currency must be a non-empty string');
   check(isMinorUnits(r.minorUnits), 'minor_units must be 0, 2 or 3');
-  check(isCount(r.lastTimestampMs), 'last timestamp is invalid');
+  check(isTimestampMs(r.lastTimestampMs), 'last timestamp is invalid');
 
   r.users.forEach((u, i) => {
     check(isId(u.id), `users[${i}].id must be 1 to 64 characters`);
@@ -69,7 +68,7 @@ export function checkRecords(r) {
     check(isNote(p.note), `${at}.note is invalid`);
     check(isVisibility(p.visibility), `${at}.visibility is invalid`);
     check(isOptionalId(p.requestId) && isOptionalId(p.settlementId), `${at} links are invalid`);
-    check(isCount(p.createdAt), `${at} timestamp is invalid`);
+    check(isTimestampMs(p.createdAt), `${at} timestamp is invalid`);
   });
   requireUnique(r.payments.map((p) => p.id), 'payment id');
 
@@ -80,7 +79,7 @@ export function checkRecords(r) {
     check(isRecordAmount(q.amount), `${at}.amount is out of range`);
     check(isNote(q.note), `${at}.note is invalid`);
     check(isRequestStatus(q.status), `${at}.status is invalid`);
-    check(isOptionalId(q.paymentId) && isCount(q.createdAt), `${at} fields are invalid`);
+    check(isOptionalId(q.paymentId) && isTimestampMs(q.createdAt), `${at} fields are invalid`);
   });
   requireUnique(r.requests.map((q) => q.id), 'request id');
   const requestIds = new Set(r.requests.map((q) => q.id));
@@ -90,14 +89,14 @@ export function checkRecords(r) {
   r.splits.forEach((sp, i) => {
     const at = `splits[${i}]`;
     check(isId(sp.id) && isUser(sp.requesterId), `${at} ids are invalid`);
-    check(isRecordAmount(sp.amount) && isNote(sp.note) && isCount(sp.createdAt), `${at} fields are invalid`);
+    check(isRecordAmount(sp.amount) && isNote(sp.note) && isTimestampMs(sp.createdAt), `${at} fields are invalid`);
     check(isList(sp.shares, isShare) && isList(sp.requestIds, (id) => requestIds.has(id)), `${at} parts are invalid`);
   });
   requireUnique(r.splits.map((sp) => sp.id), 'split id');
 
   r.settlements.forEach((st, i) => {
     const at = `settlements[${i}]`;
-    check(isId(st.id) && isCount(st.committedAt), `${at} fields are invalid`);
+    check(isId(st.id) && isTimestampMs(st.committedAt), `${at} fields are invalid`);
     check(isList(st.paymentIds, (id) => paymentIds.has(id)), `${at}.payment_ids are invalid`);
   });
   requireUnique(r.settlements.map((st) => st.id), 'settlement id');

@@ -12,6 +12,8 @@ export const MAX_NOTE_CHARS = 200;
 export const VISIBILITIES = ['public', 'private'];
 export const REQUEST_STATUSES = ['pending', 'paid', 'declined', 'cancelled'];
 export const MINOR_UNITS = [0, 2, 3];
+/** The last instant with an RFC 3339 form (§3.4): 9999-12-31T23:59:59.999Z, as epoch ms. */
+export const MAX_TIMESTAMP_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
 
 /** Characters, not UTF-16 units or bytes: an emoji counts once. */
 export const charCount = (text) => [...text].length;
@@ -31,6 +33,8 @@ export const isRecordAmount = (value) => isIntegerIn(value, 0, MAX_AMOUNT);
 export const isNote = (value) => typeof value === 'string' && charCount(value) <= MAX_NOTE_CHARS;
 export const isVisibility = (value) => VISIBILITIES.includes(value);
 export const isRequestStatus = (value) => REQUEST_STATUSES.includes(value);
+/** A stored time in epoch ms that formats as RFC 3339: 1970 to the end of year 9999. */
+export const isTimestampMs = (value) => isIntegerIn(value, 0, MAX_TIMESTAMP_MS);
 export const isMinorUnits = (value) => MINOR_UNITS.includes(value);
 export const isTotalWithinLimit = (balances) =>
   balances.reduce((sum, balance) => sum + balance, 0) <= BALANCE_LIMIT;
