@@ -6,7 +6,7 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, isAuthorizationStatus, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, isAuthorizationStatus, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { State } from './state.js';
@@ -47,8 +47,8 @@ function requireUnique(values, what) {
 export function checkRecords(r) {
   check(typeof r.currency === 'string' && r.currency !== '', 'currency must be a non-empty string');
   check(isMinorUnits(r.minorUnits), 'minor_units must be 0, 2 or 3');
-  check(isTimestampMs(r.lastTimestampMs), 'last timestamp is invalid');
-  check(isTtlSeconds(r.authorizationTtlSeconds), 'authorization_ttl_seconds must be a positive whole number of seconds');
+  check(isClockMs(r.lastTimestampMs), 'last timestamp is out of range');
+  check(isTtlSeconds(r.authorizationTtlSeconds), 'authorization_ttl_seconds must be a whole number of seconds from 1 to 3155760000');
 
   r.users.forEach((u, i) => {
     check(isId(u.id), `users[${i}].id must be 1 to 64 characters`);

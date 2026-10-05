@@ -40,19 +40,24 @@ export const isRequestStatus = (value) => REQUEST_STATUSES.includes(value);
 export const isTimestampMs = (value) => isIntegerIn(value, 0, MAX_TIMESTAMP_MS);
 export const isAuthorizationStatus = (value) => AUTHORIZATION_STATUSES.includes(value);
 /**
- * When an authorization created at `createdAt` (epoch ms) with lifetime `ttlSeconds` expires:
- * created_at plus the lifetime (stage 2), never past the last RFC 3339 instant. isTtlSeconds
- * refuses any lifetime that would reach that bound, so the cap only guards the year 9999.
+ * Fixed bounds (ruling 2abb370), so that "expires_at is created_at plus the ttl", RFC 3339 output
+ * and "accept an unchanged export" all hold at once, at any time:
+ * - MAX_TTL_SECONDS: the longest authorization lifetime, 100 years of 365.25 days;
+ * - MAX_CLOCK_MS: the latest creation time the service's clock may hold or stamp;
+ * - MAX_CLOCK_MS + MAX_TTL_SECONDS * 1000 is exactly the last RFC 3339 instant, 9999-12-31T23:59:59.999Z.
+ * Neither bound depends on the current time.
  */
-export const expiryOf = (createdAt, ttlSeconds) => Math.min(createdAt + ttlSeconds * 1000, MAX_TIMESTAMP_MS);
+export const MAX_TTL_SECONDS = 3_155_760_000;
+export const MAX_CLOCK_MS = MAX_TIMESTAMP_MS - MAX_TTL_SECONDS * 1000;
 
-/**
- * A lifetime for new authorizations: a positive whole number of seconds whose expiry, counted
- * from `now`, still has an RFC 3339 form (stage-1 §3.4), so every expires_at the service writes
- * can be exported and imported back (stage-1 §10).
- */
-export const isTtlSeconds = (value, now = Date.now()) =>
-  isIntegerIn(value, 1, Math.floor((MAX_TIMESTAMP_MS - now) / 1000));
+/** When an authorization expires: created_at plus the lifetime, exactly (stage 2). */
+export const expiryOf = (createdAt, ttlSeconds) => createdAt + ttlSeconds * 1000;
+
+/** A lifetime for new authorizations: a positive whole number of seconds, at most MAX_TTL_SECONDS. */
+export const isTtlSeconds = (value) => isIntegerIn(value, 1, MAX_TTL_SECONDS);
+
+/** A creation time the service's clock may hold: at most MAX_CLOCK_MS. */
+export const isClockMs = (value) => isIntegerIn(value, 0, MAX_CLOCK_MS);
 /** An authorization whose expires_at is at or before `now` has expired (stage 2). */
 export const isDue = (authorization, now) => authorization.expiresAt <= now;
 /** What an authorization still holds: amount − captured while open, zero once closed. */

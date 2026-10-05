@@ -291,14 +291,28 @@ test('concurrent holds, captures and voids behave as if run one at a time', asyn
   assert.equal(totals.reduce((x, y) => x + y), 13_000);
 });
 
-test('R2 S2-091 S1-024 S1-154: a lifetime whose expiry has no RFC 3339 form is refused; the largest valid one round-trips', async () => {
+test('R10 R11 S2-102 S1-154 (ruling 2abb370): fixed bounds on the lifetime and the clock; expires_at is never clamped', async () => {
+  const MAX_TTL = 3_155_760_000; // 100 years of 365.25 days
+  const MAX_CLOCK = Date.UTC(9999, 11, 31, 23, 59, 59, 999) - MAX_TTL * 1000;
   const reset = (fx) => call(srv.base, 'POST', '/_test/reset', { json: fx });
-  expectError(await reset(fixture({ authorization_ttl_seconds: 253402300799 })), 422, 'validation_failed');
-  const largest = Math.floor((Date.UTC(9999, 11, 31, 23, 59, 59) - Date.now()) / 1000) - 3600;
-  const w = await world(srv.base, fixture({ authorization_ttl_seconds: largest }));
+  const importState = (json) => call(srv.base, 'POST', '/_test/import', { json });
+  expectError(await reset(fixture({ authorization_ttl_seconds: MAX_TTL + 1 })), 422, 'validation_failed', 'one past the bound');
+
+  const w = await world(srv.base, fixture({ authorization_ttl_seconds: MAX_TTL }));
   const a = await authorize(w, 'ada', 'bob', 10);
+  assert.equal(Date.parse(a.expires_at) - Date.parse(a.created_at), MAX_TTL * 1000, 'expires_at is created_at plus the ttl');
   assert.match(a.expires_at, RFC3339);
-  assert.match(a.expires_at, /^9999-/);
   const snapshot = (await call(srv.base, 'GET', '/_test/export')).body;
-  assert.equal((await call(srv.base, 'POST', '/_test/import', { json: snapshot })).status, 204, 'the service accepts its own export');
+  await sleep(1_100);
+  assert.equal((await importState(snapshot)).status, 204, 'an export taken at the bound still imports later');
+
+  const s = snapshot.state;
+  expectError(await importState({ ...snapshot, state: { ...s, last_timestamp_ms: MAX_CLOCK + 1 } }), 422, 'validation_failed', 'clock one past its bound');
+  expectError(await importState({ ...snapshot, state: { ...s, authorization_ttl_seconds: MAX_TTL + 1 } }), 422, 'validation_failed');
+  assert.equal((await importState({ ...snapshot, state: { ...s, last_timestamp_ms: MAX_CLOCK } })).status, 204, 'clock at its bound');
+  const latest = await authorize(w, 'ada', 'bob', 10);
+  assert.equal(latest.created_at, new Date(MAX_CLOCK).toISOString().replace('Z', '+00:00'), 'the clock does not pass its bound');
+  assert.equal(latest.expires_at, '9999-12-31T23:59:59.999+00:00', 'the latest creation plus the largest ttl is the last RFC 3339 instant');
+  const atTheEnd = (await call(srv.base, 'GET', '/_test/export')).body;
+  assert.equal((await importState(atTheEnd)).status, 204);
 });
