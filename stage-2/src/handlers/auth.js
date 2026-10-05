@@ -2,16 +2,11 @@
 import { emailTaken, handleTaken, invalid, unauthenticated } from '../errors.js';
 import { hashPassword, needsUpgrade, verifyNothing, verifyPassword } from '../passwords.js';
 import { charCount, isEmail } from '../model.js';
+import { MIN_PASSWORD_CHARS, deriveHandle } from '../shared/rules.js';
 import { requiredString } from '../validate.js';
 import { meView, sessionView } from '../views.js';
 
-const MIN_PASSWORD_CHARS = 8;
-
-/** §4: the email's local part, lowercased, non-[a-z0-9_] replaced by "_", cut to 20 characters. */
-export function deriveHandle(email) {
-  const local = email.slice(0, email.lastIndexOf('@'));
-  return local.toLowerCase().replace(/[^a-z0-9_]/gu, '_').slice(0, 20);
-}
+export { deriveHandle };
 
 function checkAvailable(state, email, handle) {
   if (state.userByEmail(email)) throw emailTaken();

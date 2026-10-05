@@ -1,9 +1,6 @@
 // What a refusal says to a person (design.md §5, §7). One place for every error code's words.
 import { formatAmount } from './money.js';
-import { charCount } from './text.js';
-
-const MAX_AMOUNT = 1_000_000_000;
-const MAX_NOTE_CHARS = 200;
+import { MAX_AMOUNT, MAX_NOTE_CHARS, charCount, deriveHandle } from '../shared/rules.js';
 
 /**
  * The words for a refused money write (pay, request, reserve).
@@ -42,7 +39,7 @@ export function authRefusal(result, { email }) {
     case 'email_taken':
       return 'An account with this email already exists. Log in instead.';
     case 'handle_taken':
-      return `The handle ${derivedHandle(email)} is already taken, so this email can't be used. Try another email.`;
+      return `The handle ${deriveHandle(email)} is already taken, so this email can't be used. Try another email.`;
     case 'unauthenticated':
       return "That email and password don't match an account. Check both and try again.";
     case 'validation_failed':
@@ -53,10 +50,6 @@ export function authRefusal(result, { email }) {
       return `${sentence(result.message)} Check the details and try again.`;
   }
 }
-
-/** The handle signup would give this email (stage-1 §4), for the handle_taken message only. */
-const derivedHandle = (email) => email.slice(0, email.lastIndexOf('@')).toLowerCase()
-  .replace(/[^a-z0-9_]/gu, '_').slice(0, 20);
 
 /** The uncertain line for a write whose answer was lost (design.md §5.2 for a payment). */
 export const uncertainAbout = (what) => `We didn't get an answer about this ${what}, so it may or may not have gone through. `

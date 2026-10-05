@@ -2,13 +2,14 @@
 // visibility, status, balance and authorization is. Every reader of outside data — API bodies
 // (validate.js), reset fixtures (fixture.js) and imported state (snapshot.js) — asks here.
 
+import { MAX_AMOUNT, MAX_NOTE_CHARS, charCount } from './shared/rules.js';
+
+export { MAX_AMOUNT, MAX_NOTE_CHARS, charCount };
 export const MAX_ID_CHARS = 64;
 export const HANDLE_PATTERN = /^[a-z0-9_]{1,20}$/;
 export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+$/; // local@domain
-export const MAX_AMOUNT = 1_000_000_000;
 /** No balance, and so no total of balances, lies outside ±2^53. */
 export const BALANCE_LIMIT = 2 ** 53;
-export const MAX_NOTE_CHARS = 200;
 export const VISIBILITIES = ['public', 'private'];
 export const REQUEST_STATUSES = ['pending', 'paid', 'declined', 'cancelled'];
 /** A request leaves `pending` once, for exactly one of these (§4). */
@@ -20,8 +21,6 @@ export const DEFAULT_AUTHORIZATION_TTL_SECONDS = 600;
 /** The last instant with an RFC 3339 form (§3.4): 9999-12-31T23:59:59.999Z, as epoch ms. */
 export const MAX_TIMESTAMP_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
 
-/** Characters, not UTF-16 units or bytes: an emoji counts once. */
-export const charCount = (text) => [...text].length;
 
 /** A JSON number with an integral value (1000, 1000.0 and 1e3 alike); never a string or boolean. */
 export const isIntegralNumber = (value) => typeof value === 'number' && Number.isInteger(value);
