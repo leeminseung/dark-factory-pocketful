@@ -245,6 +245,15 @@ Tests are named `file::function` under `work/acceptance/tests/stage_1/`.
 | S1-185 | "Replays return 200 with the original complete response." (settlements) | settlements | test_settlements.py::test_replay_returns_the_original_complete_response<br>test_settlements.py::test_settlement_keys_are_per_operator | tested |
 | S1-186 | "A reset/import must preserve settlement operator permissions, original payments, requests, settlement membership and retry responses." | settlements | test_export_import.py::test_permissions_and_settlement_membership_survive<br>test_settlements.py::test_reset_sets_operator_permissions | tested |
 
+## Rows added after review (coordinator, 2026-10-06)
+
+| ID | Quote | Area | Tests | Status |
+|---|---|---|---|---|
+| S1-187 | "404 \| `not_found` \| No such resource" — `POST /requests/{id}/decline` and `/cancel` on an unknown request | decline/cancel | | open |
+| S1-188 | "Every amount in the API is an integer count of its minor units" — response amounts are JSON integers even when the request wrote `1000.0` or `1e3` | amounts | | open |
+| S1-189 | "After the body has parsed as a JSON object and the caller is authenticated, an already claimed key is resolved" — a claimed key does not override 401 (missing/unknown token) or 400 `malformed_request` (unparseable body), on all five idempotent paths | idempotency | | open |
+| S1-190 | "IDs are opaque strings" + D4 (a seeded or imported id names one resource) — ids the service generates never collide with fixture or imported ids | conventions | | open |
+
 ## Decisions (test-designer)
 
 Choices made where the requirements leave room; each test that depends on one names it.
