@@ -207,6 +207,8 @@ test('fixture rules for stage 2 are 422 and change nothing', async () => {
     'expires_at without offset': fixture({ authorizations: [seed({ expires_at: '2026-09-24T13:20:00' })] }),
     'expires_at not a date': fixture({ authorizations: [seed({ expires_at: '2026-02-30T13:20:00+00:00' })] }),
     'unknown status': fixture({ authorizations: [seed({ status: 'pending' })] }),
+    'missing status': fixture({ authorizations: [(({ status, ...rest }) => rest)(seed())] }),
+    'missing expires_at': fixture({ authorizations: [(({ expires_at, ...rest }) => rest)(seed())] }),
     'self authorization': fixture({ authorizations: [seed({ to_user_id: 'u_cy' })] }),
     'zero amount': fixture({ authorizations: [seed({ amount: 0 })] }),
   };

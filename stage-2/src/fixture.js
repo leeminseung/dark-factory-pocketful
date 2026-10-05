@@ -77,7 +77,7 @@ function readAuthorization(raw, where, createdAt) {
   const expiresAt = parseTimestamp(read(object(raw, where), 'expires_at', 'string', where));
   if (expiresAt === null) throw invalid(`${where}.expires_at is not an RFC 3339 timestamp with an offset`);
   const amount = read(raw, 'amount', 'any', where);
-  const status = read(raw, 'status', 'any', where, 'open');
+  const status = read(raw, 'status', 'any', where); // required: the fixture format gives no default
   return {
     id: read(raw, 'id', 'string', where),
     fromUserId: read(raw, 'from_user_id', 'string', where),
