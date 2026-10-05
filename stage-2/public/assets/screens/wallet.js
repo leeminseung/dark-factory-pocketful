@@ -78,6 +78,10 @@ export function renderWallet(ctx, main) {
   }
 
   // ---- forms ---------------------------------------------------------------
+  // Two outcomes never show at once: a success line goes when the next action starts
+  // (design.md §5). Form values and their retry identities are untouched.
+  const clearSuccessLines = () => main.querySelectorAll('.feedback.success').forEach((line) => line.remove());
+
   const forms = Object.fromEntries(Object.entries(FORMS).map(([name, spec]) => [name, moneyForm(name, spec)]));
 
   function moneyForm(name, spec) {
@@ -108,6 +112,7 @@ export function renderWallet(ctx, main) {
 
     async function send(event) {
       event.preventDefault();
+      clearSuccessLines();
       const body = bodyNow();
       const minor = body.amount;
       if (minor === null) {
