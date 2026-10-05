@@ -1,0 +1,171 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { call, client, fixture, newKey, user, useServer, world } from './helpers.js';
+
+const srv = useServer();
+const expectError = (res, status, code, label) =>
+  assert.deepEqual([res.status, res.body?.error?.code], [status, code], label ?? JSON.stringify(res.body));
+const reset = (json) => call(srv.base, 'POST', '/_test/reset', { json });
+const exportState = async () => (await call(srv.base, 'GET', '/_test/export')).body;
+const importState = (json) => call(srv.base, 'POST', '/_test/import', { json });
+
+test('health is 200 ok without a token', async () => {
+  assert.deepEqual(await call(srv.base, 'GET', '/health'), { status: 200, body: { status: 'ok' } });
+});
+
+test('a rejected fixture is 422 or 400 and changes nothing', async () => {
+  const w = await world(srv.base);
+  await w.ada.post('/payments', { to_handle: 'bob', amount: 1 }, newKey());
+  const broken = [
+    fixture({ users: [user('ada', -1), user('bob', 100)] }),
+    fixture({ minor_units: 1 }),
+    fixture({ users: [user('ADA', 1)] }),
+    fixture({ users: [user('ada', 1), user('ada', 2, { id: 'u_other', email: 'o@x.y' })] }),
+    fixture({ users: [user('ada', 1.5)] }),
+    fixture({ payments: [{ id: 'p', from_user_id: 'u_ada', to_user_id: 'u_zed', amount: 1 }] }),
+    fixture({ requests: [{ id: 'r', requester_id: 'u_ada', payer_id: 'u_bob', amount: 1, status: 'open' }] }),
+    fixture({ settlement_operator_ids: ['u_nobody'] }),
+  ];
+  for (const fx of broken) {
+    expectError(await reset(fx), 422, 'validation_failed', JSON.stringify(fx).slice(0, 120));
+  }
+  expectError(await reset(fixture({ users: 'nope' })), 400, 'malformed_request');
+  expectError(await call(srv.base, 'POST', '/_test/reset', { raw: '{bad' }), 400, 'malformed_request');
+  assert.equal(await w.ada.balance(), 9_999);
+});
+
+test('reset replaces everything, tokens included, and supports other currencies', async () => {
+  const w = await world(srv.base);
+  await w.ada.post('/payments', { to_handle: 'bob', amount: 1 }, newKey());
+  assert.equal((await reset(fixture({ currency: 'JPY', minor_units: 0 }))).status, 204);
+  expectError(await w.ada.get('/me'), 401, 'unauthenticated');
+  const fresh = await world(srv.base, fixture({ currency: 'BHD', minor_units: 3 }));
+  const me = (await fresh.ada.get('/me')).body;
+  assert.deepEqual([me.balance, me.currency, me.minor_units], [10_000, 'BHD', 3]);
+  assert.deepEqual((await fresh.ada.get('/activity')).body.payments, []);
+});
+
+test('export/import restores accounts, tokens, records and retries; import replaces', async () => {
+  const w = await world(srv.base, fixture({ settlement_operator_ids: ['u_ada'] }));
+  const payKey = newKey();
+  const payment = (await w.ada.post('/payments', { to_handle: 'bob', amount: 300 }, payKey)).body;
+  const request = (await w.bob.post('/requests', { payer_handle: 'ada', amount: 40 }, newKey())).body;
+  const failedKey = newKey();
+  expectError(await w.cy.post('/payments', { to_handle: 'bob', amount: 9_999 }, failedKey), 409, 'insufficient_funds');
+  const stKey = newKey();
+  const stBody = { transfers: [{ from_handle: 'bob', to_handle: 'cy', amount: 5 }] };
+  const settlement = (await w.ada.post('/settlements', stBody, stKey)).body;
+  const snapshot = await exportState();
+  assert.equal(snapshot.track, 'pocketful');
+  assert.equal(snapshot.format_version, 1);
+  await w.ada.post('/payments', { to_handle: 'cy', amount: 1 }, newKey()); // not in the snapshot
+
+  await world(srv.base, fixture({ users: [user('zed', 7)] }));
+  assert.equal((await importState(snapshot)).status, 204);
+  assert.equal((await importState(snapshot)).status, 204, 'importing twice duplicates nothing');
+
+  assert.equal(await w.ada.balance(), 10_000 - 300);
+  assert.equal(await w.cy.balance(), 505);
+  const login = await call(srv.base, 'POST', '/auth/login', { json: { email: 'bob@example.com', password: 'correct horse' } });
+  assert.equal(login.status, 200);
+  expectError(await call(srv.base, 'POST', '/auth/login', { json: { email: 'zed@example.com', password: 'correct horse' } }),
+    401, 'unauthenticated', 'import removes the previous data');
+  const replay = await w.ada.post('/payments', { to_handle: 'bob', amount: 300 }, payKey);
+  assert.deepEqual([replay.status, replay.body], [200, payment]);
+  const stReplay = await w.ada.post('/settlements', stBody, stKey);
+  assert.deepEqual([stReplay.status, stReplay.body], [200, settlement]);
+  assert.equal((await w.cy.post('/payments', { to_handle: 'bob', amount: 1 }, failedKey)).status, 201);
+  const feed = (await w.ada.get('/activity')).body.payments;
+  assert.equal(feed.filter((p) => p.payment_id === payment.payment_id).length, 1);
+  assert.deepEqual(feed.find((p) => p.payment_id === payment.payment_id), payment);
+  const listed = (await w.ada.get('/requests')).body.requests;
+  assert.deepEqual(listed, [request]);
+});
+
+test('a defective import is 422 (or 400 for bad JSON) and changes nothing', async () => {
+  const w = await world(srv.base);
+  const good = await exportState();
+  const bad = [
+    {}, { ...good, track: 'other' }, { ...good, format_version: 2 }, { track: 'pocketful', format_version: 1 },
+    { ...good, state: { ...good.state, users: 'x' } },
+    { ...good, state: { ...good.state, users: [{ ...good.state.users[0], password_hash: 'plain' }] } },
+    { ...good, state: { ...good.state, tokens: [{ token: 't', user_id: 'u_nobody' }] } },
+    { ...good, state: { ...good.state, payments: [{ id: 'p' }] } },
+  ];
+  for (const envelope of bad) {
+    expectError(await importState(envelope), 422, 'validation_failed', JSON.stringify(envelope).slice(0, 80));
+  }
+  expectError(await call(srv.base, 'POST', '/_test/import', { raw: '{oops' }), 400, 'malformed_request');
+  assert.equal(await w.ada.balance(), 10_000);
+});
+
+test('settlements: operator only, atomic, net affordability, ordered receipts', async () => {
+  const w = await world(srv.base, fixture({ settlement_operator_ids: ['u_cy'] }));
+  const batch = { transfers: [
+    { from_handle: 'bob', to_handle: 'ada', amount: 3_000, note: 'net' },
+    { from_handle: 'ada', to_handle: 'bob', amount: 1_000, visibility: 'private', colour: 'x' },
+  ] };
+  expectError(await call(srv.base, 'POST', '/settlements', { json: batch, key: newKey() }), 401, 'unauthenticated');
+  expectError(await w.ada.post('/settlements', batch, newKey()), 403, 'forbidden');
+
+  // bob holds 2500 and sends 3000, but receives 1000 in the same batch: affordable net.
+  const res = await w.cy.post('/settlements', batch, newKey());
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  const s = res.body;
+  assert.deepEqual(s.payments.map((p) => [p.from_handle, p.to_handle, p.amount, p.note, p.visibility]),
+    [['bob', 'ada', 3_000, 'net', 'public'], ['ada', 'bob', 1_000, '', 'private']]);
+  assert.ok(s.payments.every((p) => p.settlement_id === s.settlement_id && p.request_id === null && p.created_at === s.committed_at));
+  assert.equal(await w.ada.balance(), 12_000);
+  assert.equal(await w.bob.balance(), 500);
+  const cyFeed = (await w.cy.get('/activity')).body.payments.map((p) => p.payment_id);
+  assert.deepEqual(cyFeed, [s.payments[0].payment_id], 'the operator sees no private member');
+  assert.deepEqual((await w.cy.get('/requests')).body.requests, []);
+});
+
+test('settlement failures: shape, entry order, funds; nothing commits and the key stays free', async () => {
+  const w = await world(srv.base, fixture({ settlement_operator_ids: ['u_ada'] }));
+  const t = (from_handle, to_handle, amount, extra = {}) => ({ from_handle, to_handle, amount, ...extra });
+  const cases = [
+    [{}, 422, 'validation_failed'],
+    [{ transfers: [] }, 422, 'validation_failed'],
+    [{ transfers: 'x' }, 422, 'validation_failed'],
+    [{ transfers: Array.from({ length: 33 }, () => t('ada', 'bob', 1)) }, 422, 'validation_failed'],
+    [{ transfers: [7] }, 422, 'validation_failed'],
+    [{ transfers: [t('ada', 'nobody', 1), t('ada', 'ada', 1)] }, 404, 'not_found'],
+    [{ transfers: [t('ada', 'ada', 1), t('ada', 'nobody', 1)] }, 422, 'self_payment'],
+    [{ transfers: [t('ada', 'bob', 0), t('ada', 'nobody', 1)] }, 422, 'validation_failed'],
+    [{ transfers: [t('cy', 'bob', 600), t('ada', 'nobody', 1)] }, 404, 'not_found'],
+    [{ transfers: [t('ada', 'bob', 5, { note: null })] }, 422, 'validation_failed'],
+    [{ transfers: [t('ada', 'bob', 5, { visibility: 'secret' })] }, 422, 'validation_failed'],
+    [{ transfers: [t('cy', 'bob', 400), t('cy', 'ada', 101)] }, 409, 'insufficient_funds'],
+  ];
+  const key = newKey();
+  for (const [body, status, code] of cases) {
+    expectError(await w.ada.post('/settlements', body, key), status, code, JSON.stringify(body).slice(0, 100));
+  }
+  assert.deepEqual(await Promise.all(['ada', 'bob', 'cy'].map((h) => w[h].balance())), [10_000, 2_500, 500]);
+  assert.deepEqual((await w.ada.get('/activity')).body.payments, []);
+  assert.equal((await w.ada.post('/settlements', { transfers: [t('cy', 'bob', 500)] }, key)).status, 201);
+  assert.equal(await w.cy.balance(), 0);
+});
+
+test('concurrent settlements over shared wallets keep every balance nonnegative', async () => {
+  const w = await world(srv.base, fixture({ settlement_operator_ids: ['u_ada'] }));
+  const out = await Promise.all(Array.from({ length: 20 }, () => w.ada.post('/settlements', {
+    transfers: [{ from_handle: 'cy', to_handle: 'bob', amount: 200 }, { from_handle: 'bob', to_handle: 'ada', amount: 100 }],
+  }, newKey())));
+  assert.equal(out.filter((r) => r.status === 201).length, 2);
+  assert.equal(out.filter((r) => r.status === 409).length, 18);
+  const balances = await Promise.all(['ada', 'bob', 'cy'].map((h) => w[h].balance()));
+  assert.deepEqual(balances, [10_200, 2_700, 100]);
+});
+
+test('an operator id from import keeps its permission', async () => {
+  await world(srv.base, fixture({ settlement_operator_ids: ['u_bob'] }));
+  const snapshot = await exportState();
+  await reset(fixture());
+  await importState(snapshot);
+  const login = await call(srv.base, 'POST', '/auth/login', { json: { email: 'bob@example.com', password: 'correct horse' } });
+  const bob = client(srv.base, login.body.token);
+  assert.equal((await bob.post('/settlements', { transfers: [{ from_handle: 'ada', to_handle: 'cy', amount: 1 }] }, newKey())).status, 201);
+});
