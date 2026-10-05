@@ -42,6 +42,8 @@
   (work/reviews/design-61246ed.md). Probes fail S1-158 + S2-158 (F2: edited receipt fields — request status, split/
   authorization note, authorization status — import with 204; work/reviews/acceptance-61246ed.md). Count 2 vs 7 at
   rejection -> fell; round 4 with F2.
+- Round 4 started: product 04f3ca4 (stage folders = 2c1be66; both changed for F2), suite ba66344 on both folders;
+  no screens touched, so no screen review.
 
 ## Rulings
 - R1 (round 1, pay form changed and changed back after a confirmed payment replays it): BLOCKING. Text: "Submitting it
