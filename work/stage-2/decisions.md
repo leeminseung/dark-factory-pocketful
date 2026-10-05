@@ -33,6 +33,9 @@
   (work/reviews/design-8c3360d.md). Probes fail S2-102 (F1: at TTLs near the accepted bound, later authorizations get
   expires_at clamped to 9999-12-31T23:59:59.999, not created_at + ttl; work/reviews/acceptance-8c3360d.md). Count 1 vs
   previous 0 -> did not fall -> loop stopped; final review on 8c3360d.
+- Final review of 8c3360d: CHANGES NEEDED, blocking 7 (R10-R15 + S2-102); work/reviews/review-8c3360d-final.md
+  (fix-commit + probe briefs/raw listed; supplied --all --mode isolated pass 1-2, fail 3, claimed 2). R1, R3-R7, R9 fixed;
+  R8 history; R2 -> R10/R11. Sent R10-R23 + D12 to implementer; rounds continue from 3 without reviewer, compared with 7.
 
 ## Rulings
 - R1 (round 1, pay form changed and changed back after a confirmed payment replays it): BLOCKING. Text: "Submitting it
@@ -42,6 +45,12 @@
   form retryable with the **same key and body**. ... Unknown outcomes are not confirmed rejections." So: while an
   outcome is unknown, a form restored to the sent body reuses its key (S2-074 edit-then-restore test stands); after a
   confirmed success or refusal, any field change starts a new key.
+- R10/R11 TTL bound (final review): text — "If supplied, it must be a positive integer number of seconds";
+  "`expires_at` is `created_at` plus `authorization_ttl_seconds`"; §3.4 "Timestamps in responses are RFC 3339"; §10 "It must
+  accept an unchanged export produced by this service". All four hold only with a FIXED bound: the TTL (and the stored
+  clock) must be limited by constants chosen so that latest-possible created_at + largest TTL <= 9999-12-31T23:59:59.999Z.
+  Reset and import refuse values above the constants with 422 validation_failed (a stated rule — §3.4 — would be
+  violated); the bound never depends on the current time; expires_at is never clamped. Constants recorded in notes.md.
 
 ## Acceptance
 
