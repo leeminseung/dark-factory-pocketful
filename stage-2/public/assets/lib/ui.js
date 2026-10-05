@@ -25,10 +25,14 @@ export function field({ label, testid, hint, value = '', type = 'text', inputmod
   };
 }
 
-/** A button that shows its busy label and a spinner while `busy` is true, keeping its width. */
-export function button({ label, busyLabel, testid, variant = 'primary', onClick, type = 'button' }) {
+/**
+ * A button that shows its busy label while `busy` is true, keeping its width. `busyIcon` is the
+ * icon that turns while busy: a spinner by default, or the button's own glyph (Refresh).
+ */
+export function button({ label, busyLabel, testid, variant = 'primary', onClick, type = 'button', busyIcon = null }) {
   const text = h('span', { class: 'button-text' }, label);
-  const el = h('button', { type, testid, class: `button ${variant}`, onclick: onClick }, icon('spinner', 'spin'), text);
+  const turning = busyIcon ?? icon('spinner', 'spin');
+  const el = h('button', { type, testid, class: `button ${variant}`, onclick: onClick }, turning, text);
   return {
     el,
     setLabel(next) { text.textContent = next; },

@@ -42,8 +42,10 @@ export function renderWallet(ctx, main) {
   bar.held = h('span', { class: 'bar-held' });
   bar.el.append(bar.solid, bar.held);
   // Refresh stays clickable while a read is in flight: a newer click must be able to overtake it.
-  const refreshButton = button({ label: 'Refresh', busyLabel: 'Refreshing…', testid: 'wallet-refresh', variant: 'on-plum', onClick: () => refresh() });
-  refreshButton.el.prepend(icon('refresh', 'refresh-icon'));
+  const refreshButton = button({
+    label: 'Refresh', busyLabel: 'Refreshing…', testid: 'wallet-refresh', variant: 'on-plum',
+    busyIcon: icon('refresh', 'refresh-icon'), onClick: () => refresh(),
+  });
   const refreshing = (on) => {
     refreshButton.busy(on);
     refreshButton.el.disabled = false;
