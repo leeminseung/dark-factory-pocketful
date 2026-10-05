@@ -1,3 +1,42 @@
+# Screen review brief — Pocketful stage 2, revision 7364e79, round 1
+
+Review the screenshots below against the design direction, the requirement text about screens and
+the product constraints. Use the skills frontend-design and design-craft (invoke both with the
+Skill tool and follow them). Answer in text only; write no files.
+
+Open each screenshot with the Read tool. Every screenshot is a PNG under /tmp/pd-shots/7364e79/.
+Names are `{viewport}-{screen-or-state}.png`; viewport 375 is a 375×812 phone, 1280 is a
+1280×900 desktop. Names without `-fold`/`focus`/`error`/`loading`/`uncertain`/`success` are full
+pages; the state shots are the visible viewport. `index.txt` in that folder lists each shot with its
+document scrollWidth vs clientWidth (no shot has horizontal scroll).
+
+Data in the shots: the signed-in user is "Maximiliane Okafor-Lindqvist", handle
+`grace_okafor_lindqvi` (20 characters), EUR with 2 decimals; another user `l1_0o`; a 200-character
+note without spaces; open holds (40.00 EUR outgoing, 25.00 EUR incoming, one seeded hold already
+expired). Other fixtures: a user with no activity (`solo`) and a JPY wallet (0 decimals).
+
+Shots (375 and 1280 each): signup, signup-error, login, login-error, wallet-held,
+wallet-held-fold, focus-input, focus-button, pay-error-validation (15.005), pay-error-insufficient,
+pay-loading, pay-success, pay-uncertain (response lost), pay-retry-success, refresh-loading,
+after-authorize, authorize-error, request-form-error, requests-loading, requests, requests-error
+(request cancelled elsewhere, then Pay clicked), requests-paid, split-initial, split-preview,
+split-invalid-amount, split-error, split-success, auth-loading, authorizations, auth-error (capture
+too large), auth-captured, auth-voided, wallet-after-release, wallet-empty, requests-empty,
+auth-empty, wallet-jpy, jpy-pay-error.
+
+## Answer with
+
+1. Scores 1–5 with one line of evidence each for: composition, design quality, distinctiveness
+   (design-craft's test for working screens), craft, function, delight.
+2. Checks: horizontal scrolling, visible labels, visible keyboard focus, touch targets ≥44 px on
+   phones, contrast, and whether the states that must look different (available, held, pending,
+   loading, successful, refused, uncertain) do.
+3. Findings, each with: screenshot file name(s), viewport, what is wrong, the design.md section or
+   requirement sentence it departs from (quote it), and whether it breaks a requirement sentence
+   (quote) or only the direction. Rank by impact. Only report what you can see in a screenshot.
+
+## Design direction (work/design.md, verbatim)
+
 # Pocketful design direction — stage 2 ("the lined pocket")
 
 Owner: product-designer. Applies to every screen in `stage-2/`: `/signup`, `/login`, `/`,
@@ -98,9 +137,7 @@ Content left-aligned, max width 1120 px, centred container.
 **Header (every signed-in screen, identical):** wordmark "Pocketful" (20/600 ink) left; right:
 `current-user` (display name, 16/600 ink) with `current-handle` beneath it (13/400 graphite,
 **bare handle text only** — no `@`, no CSS `::before` content, no words), then `logout-button`
-"Log out" (text button, `white-space: nowrap`, hit box ≥44×44). At ≤600 px the header keeps one
-shape for every user: the display name is one line truncated with an ellipsis (full name in
-`title`), the handle one line beneath it, and "Log out" never wraps. Below the header, the nav: four separate links with 24 px gaps, **Wallet** (`/`), **Requests**
+"Log out" (text button). Below the header, the nav: four separate links with 24 px gaps, **Wallet** (`/`), **Requests**
 (`/requests`), **Split** (`/split`) and **Reserved** (`/authorizations`). The current link
 is ink 600 with a 2 px orchid underline (`aria-current="page"`); others graphite 400. At ≤600 px
 the four links are four equal-width segments on one row (each ≥44 px tall); no scrolling nav.
@@ -174,22 +211,14 @@ key figure sits on it (fixes the selection's evenness gap on `/requests`, `/spli
 | `/signup`, `/login` | Brand half (§7) | Wordmark and headline |
 
 The strips are summaries computed from the lists already on the page; they carry no
-`data-testid` of their own and never duplicate `wallet-*` ids (those live only on `/`). While
-the lists load, the strip shows "Loading…" in `--lining-soft` at the height it will have, never
-an empty plum block.
+`data-testid` of their own and never duplicate `wallet-*` ids (those live only on `/`).
 
 ## 5. Components and the words of each state
 
 General: every input has a visible `<label>` above it (16/600 ink). Feedback sits directly under
 the button that caused it, never in a toast; refusals use `role="alert"`, success and uncertain
 `role="status"`. Every message element exists only while it applies (`auth-error`, `pay-error`,
-`pay-uncertain` etc. are absent, not hidden, otherwise). A success line is removed when the
-next action on the same screen starts, so two outcomes never show at once. Links used as
-actions (e.g. "Held for others", "Log in", "Create an account") get a hit box of at least 44 px
-tall on phones through padding.
-
-Handles never break inside the word. At ≤600 px a row puts its amount on its own line under the
-title whenever the title and amount cannot share a line, so the title gets the full row width.
+`pay-uncertain` etc. are absent, not hidden, otherwise).
 
 Amount inputs: `type="text" inputmode="decimal"`, the currency code shown as a static suffix
 outside the input. Amount format everywhere is exactly the spec's: `100.00 EUR`, `1200 JPY`.
@@ -208,12 +237,7 @@ Times: "Today, 14:32", "Yesterday, 09:10", "3 Oct, 18:05" within the current yea
   text is the formatted amount only; the code may be wrapped in an inner span at the same size
   but the element text stays `210.00 EUR`.
 - The bar (decorative, `aria-hidden="true"`): full width, 8 px tall, radius 4. Solid paper =
-  available, hatched `--lining-soft` on plum = held. Fully solid when held is zero. Any held
-  amount above zero gets a hatched segment of at least 16 px. When total is zero the bar is an
-  empty track (a 1 px `--lining-soft` outline), not a solid bar.
-- Held swatch and icon: at least 3 parallel 45° lines in the swatch box, so it reads as hatch and
-  never as a single slash (the Declined icon is a slashed circle).
-- Refresh while loading shows one turning icon (the refresh glyph itself), not a second spinner.
+  available, hatched `--lining-soft` on plum = held. Fully solid when held is zero.
 - "Total" then `wallet-balance` (16/400 lining-soft label, 16/600 paper amount, `data-amount`).
 - Held line: 12 px hatch swatch, "Held for others", then `wallet-held` (`data-amount`). The
   whole line, including `wallet-held`, is **absent when held is zero**; the line is a link to
@@ -350,8 +374,7 @@ Plum summary strip (§4), then `authorization-list`, newest first, rows like the
 - Outgoing open: `authorization-void-{id}` "Release hold" (outline) / "Releasing…".
 - Captured: "Collected" + `authorization-captured-{id}` (e.g. `40.00 EUR`).
 - Voided: "Released. The money went back to {from}." Expired: "Expired {date}. The money went
-  back to {from}." When the signed-in user is the payer, both end "went back to you."
-- "Collect by …" uses the same time words as everywhere else ("Collect by today, 06:51").
+  back to {from}."
 - `authorization-error` under the row's buttons: "Couldn't collect {amount}. Only {remaining}
   is left to collect." / "This reservation has expired, so it can't be collected. The list has
   been updated." / "This reservation is no longer open. The list has been updated."
@@ -457,3 +480,202 @@ no spaces; timestamps from 2025 and from today; 3 holds open and 0 holds (held l
    (on lists it repeats once per actionable row).
 10. A plum summary strip on `/requests` and `/authorizations`, and `split-preview` as the plum
     panel on `/split`, so every working screen has its one plum mass.
+
+## Requirement text (verbatim)
+
+# Pocketful — Stage 2: wallet screens and payment authorizations
+
+The stage-1 requirements continue to apply, with the additions below. Numbered section
+references such as §5 and §7 refer to `stage-1.md`.
+
+Users can manage payments, requests and bill splits in a browser. They can also reserve
+money for a recipient to collect later, in one or more captures.
+
+The following screens must be reachable by URL. Other screens must be reachable through
+the UI. Server-side and client-side rendering are both permitted.
+
+| Route | Screen |
+|---|---|
+| `/` | Balance, pay form, request form and the activity feed |
+| `/requests` | Incoming and outgoing requests, with pay, decline and cancel |
+| `/split` | Split form |
+| `/signup` | Signup |
+| `/login` | Login |
+
+The browser and the API share `/requests`. Return the UI for `Accept: text/html`; API requests
+without that header receive JSON.
+
+The UI must expose the `data-testid` attributes listed below for integration testing.
+Additional elements are permitted, and the visual implementation is the team's choice subject
+to the product-quality requirements below.
+
+## Product and visual direction
+
+The browser experience must feel like a coherent, presentation-ready consumer finance product,
+not a test harness with controls attached. Aim for a calm, trustworthy character. Available funds
+must be the clearest monetary value once holds exist, with total and held funds visibly secondary.
+Payments, requests, splits and authorisations should be easy to scan, and status, direction,
+privacy and money movement should be understandable without interpreting raw API data.
+
+Use a consistent visual system for typography, spacing, colour, controls and feedback. Primary
+actions must be easy to identify. Available, held, pending, loading, successful, refused and
+uncertain states must be visually distinct as well as satisfying the behavioural requirements
+below. Format people, amounts and timestamps for people first; expose technical identifiers only
+where they help the user.
+
+The required flows must remain clear and usable at a 375 CSS-pixel viewport and at conventional
+desktop widths, without horizontal page scrolling. Inputs need visible labels, keyboard focus must
+be apparent, and text and controls need sufficient contrast. Provide considered empty, loading and
+error states, and keep navigation consistent across the required routes. A custom illustration,
+brand asset or exact visual match to a reference is not required.
+
+## Signup and login
+
+| `data-testid` | Element |
+|---|---|
+| `signup-email`, `signup-password`, `signup-display-name` | Inputs |
+| `signup-submit` | Button |
+| `login-email`, `login-password`, `login-submit` | Inputs and button |
+| `auth-error` | Error message. Present only when there is one |
+| `current-user` | Visible on every screen when signed in. Text contains the display name |
+| `current-handle` | Text is exactly the caller's handle, with no `@` and no surrounding words |
+| `logout-button` | Button |
+
+## Balance and pay — `/`
+
+| `data-testid` | Element |
+|---|---|
+| `wallet-balance` | Text is exactly the formatted amount. Carries `data-amount="{minor units}"` |
+| `pay-handle`, `pay-amount`, `pay-note` | Inputs. `pay-amount` is a **decimal** string as a person would type it, e.g. `15.00` |
+| `pay-visibility` | Selects `public` or `private`. Option values are those two strings |
+| `pay-submit` | Button |
+| `pay-error` | Error message, when the payment is refused — including insufficient funds |
+| `request-handle`, `request-amount`, `request-note`, `request-submit` | The request form |
+| `request-error` | Error message, when the request is refused |
+
+Keep the pay form's values after success. Submitting it again without changing a field
+must not send another payment: `wallet-balance` falls once, the feed contains one payment
+and `pay-error` is absent. Changing a field makes the next submission a new payment request.
+Retries follow §7.
+
+**Formatted amount.** `wallet-balance` is the decimal with exactly `minor_units` decimal places, a
+single space, then the currency code: `100.00 EUR`. For a `minor_units` of `0` there is no decimal
+point at all: `1200 JPY`. Balances are never negative, so there is no sign.
+
+The form accepts decimal amounts and submits minor units to the API. With `minor_units: 2`,
+`15.00` and `15` both submit `1500`; `15.5` submits `1550`. Nonnumeric input or more than
+`minor_units` decimal places must show the form's error element without sending a request.
+For example, `15.005` is rejected rather than rounded.
+
+## Activity feed — `/`
+
+| `data-testid` | Element |
+|---|---|
+| `activity-list` | Container. Its children are newest first in the DOM |
+| `activity-item-{payment_id}` | One per visible payment. Carries `data-visibility="public"` or `data-visibility="private"` |
+| `activity-parties-{payment_id}` | Text contains both handles |
+| `activity-amount-{payment_id}` | Text is exactly the formatted amount |
+| `activity-note-{payment_id}` | Text is exactly the note. Present even when the note is empty |
+| `empty-activity` | Shown instead of the list when nothing is visible |
+
+Two payments with equal timestamps may appear in either order.
+
+## Requests — `/requests`
+
+| `data-testid` | Element |
+|---|---|
+| `incoming-list`, `outgoing-list` | Containers |
+| `request-item-{request_id}` | One per request. Carries `data-status="{status}"` |
+| `request-amount-{request_id}` | Text is exactly the formatted amount |
+| `request-pay-{request_id}` | Button. Present only on a `pending` incoming request |
+| `request-decline-{request_id}` | Button. Present only on a `pending` incoming request |
+| `request-cancel-{request_id}` | Button. Present only on a `pending` outgoing request |
+| `request-error` | Shown when a pay, decline or cancel is refused |
+| `empty-requests` | Shown when both lists are empty |
+
+## Split — `/split`
+
+| `data-testid` | Element |
+|---|---|
+| `split-amount` | Decimal input, same rule as `pay-amount` |
+| `split-handles` | Text input: handles separated by commas, in order |
+| `split-note`, `split-submit` | Input and button |
+| `split-preview` | Shows the computed shares before submitting. Contains one `split-share-{handle}` per participant |
+| `split-share-{handle}` | Text is exactly the formatted share amount |
+| `split-error` | Error message, when the split is refused |
+
+`split-preview` must show the shares the server would compute, by the rule in `stage-1.md`
+§9, before anything is posted. The preview and submitted split must have identical shares.
+
+After any successful action, the balance, the feed and the request lists on the same page must
+show the new state without a manual reload. Navigation must wait for the write to succeed before
+it refreshes the data. Any mechanism is fine, including a full navigation. **There is no
+live-update requirement here** — another client may change state, but this browser need only
+refresh after its own action or an explicit refresh.
+
+
+## Competing clients and uncertain outcomes
+
+- Add `wallet-refresh`, a button on `/` that refreshes the balance and feed without clearing
+  the pay form. **Latest refresh wins:** a delayed earlier read must not overwrite a later
+  refresh, including when responses arrive out of order.
+- Another client may spend the balance after this browser reads it. A refused payment shows
+  `pay-error`, refreshes the balance/feed, and preserves all pay inputs. A request cancelled
+  elsewhere while its pay button is visible must show `request-error` when payment is refused
+  and refresh the request list so the stale pay button disappears.
+- If a payment response is lost, including after `POST /payments` commits, show `pay-uncertain`
+  (nonempty text), not `pay-error`. Keep the unchanged form retryable with the **same key and
+  body**. Successful retry removes both error/uncertainty elements, refreshes the balance and
+  feed, and moves money exactly once. Unknown outcomes are not confirmed rejections.
+
+No background polling, live synchronization, or recovery across page reloads is required.
+The same balance refresh rules apply to the available and held amounts introduced below.
+
+
+## UI
+
+A new route `/authorizations`, and the wallet gains two numbers. The UI and the API share
+`/authorizations`: serve HTML for `Accept: text/html` and JSON otherwise, as for `/requests`.
+
+| `data-testid` | Element |
+|---|---|
+| `wallet-balance` | Formatted `total`, retaining the existing display and `data-amount` |
+| `wallet-available` | Formatted `available`, with `data-amount`. **Present this as the headline number** — it is what the user can actually spend |
+| `wallet-held` | Formatted `held`, with `data-amount`. Absent when `held` is zero |
+| `authorize-handle`, `authorize-amount`, `authorize-note`, `authorize-visibility`, `authorize-submit` | The authorise form. Same input rules as the pay form |
+| `authorize-error` | Shown when the authorisation is refused, including insufficient available funds |
+| `authorization-list` | Container on `/authorizations`. Children newest first in the DOM |
+| `authorization-item-{authorization_id}` | Carries `data-status="{status}"` |
+| `authorization-amount-{id}` | Text is exactly the formatted authorised amount |
+| `authorization-captured-{id}` | Formatted captured amount. Present only when `status` is `captured` |
+| `authorization-expires-{id}` | Text is the RFC 3339 `expires_at` |
+| `authorization-capture-amount-{id}` | Decimal input, pre-filled with the remaining amount. Present only on an incoming `open` authorisation |
+| `authorization-capture-{id}` | Button. Present only on an incoming `open` authorisation |
+| `authorization-void-{id}` | Button. Present only on an outgoing `open` authorisation |
+| `authorization-error` | Shown when a capture or a void is refused |
+| `empty-authorizations` | Shown when the list is empty |
+
+The UI must reflect seeded and newly created holds. Show available funds as the user's
+spending balance, including immediately after reset with open holds.
+
+
+## Screens and states named by the requirements
+
+Screens: `/signup`, `/login` (the front door), `/` (balance with available as headline,
+total and held secondary; pay form; request form; authorise form; activity feed;
+refresh button), `/requests` (incoming and outgoing lists with pay/decline/cancel),
+`/split` (split form with live share preview), `/authorizations` (list with capture amount
+input and capture button on incoming open, void on outgoing open).
+States that must look different: available, held, pending, loading, successful, refused,
+uncertain (payment response lost — retryable), plus empty states (activity, requests,
+authorisations), form errors (auth, pay, request, authorise, split, request action,
+authorisation action), request statuses, authorisation statuses, public vs private.
+
+## Product constraints
+
+- The product may have no network at runtime: font files, icons and every other asset live
+  inside it.
+- Every element and text the requirements name stays visible, in place and exactly as
+  specified. Nothing the design adds, motion included, delays, hides or moves it.
+- The screens meet the requirements' rules for viewports, labels, keyboard focus and contrast.
+
