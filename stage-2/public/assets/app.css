@@ -128,10 +128,14 @@ select.input { appearance: auto; }
 .plum-panel, .plum-strip { background: var(--lining); color: var(--paper); border-radius: 20px; padding: 24px; min-width: 0; }
 .on-plum-soft, .on-plum-meta, .available-label, .strip-label { color: var(--lining-soft); }
 .available-label { font-weight: 600; }
-.available-figure { font-size: clamp(2.5rem, 10vw, 3.5rem); line-height: 1.1; font-weight: 800; white-space: nowrap; }
+.available { container-type: inline-size; min-width: 0; }
+/* The headline fits its width for every legal balance: up to 3.5rem, smaller only when the figure is
+   long, and never below 1.25rem, so it stays larger than the 16 px total and held (stage 2 R15). */
+.available-figure { font-size: clamp(1.25rem, min(max(2.5rem, 10vw), calc(100cqi / (var(--chars, 10) * 0.64))), 3.5rem);
+  line-height: 1.1; font-weight: 800; white-space: nowrap; }
 .figures { display: grid; gap: 16px; }
 .secondary-figures { display: grid; gap: 4px; }
-.figure-line { display: flex; justify-content: space-between; gap: 16px; }
+.figure-line { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0 16px; }
 .figure-line dt { color: var(--lining-soft); }
 .figure-line dd { font-weight: 600; white-space: nowrap; }
 .held-link { color: var(--paper); display: inline-flex; align-items: center; gap: 8px; text-underline-offset: 3px; }

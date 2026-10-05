@@ -133,6 +133,32 @@ try:
       login(pg4, 'zed'); pg4.wait_for_selector(S('wallet-balance'))
       empty = pg4.evaluate("document.querySelector('.bar').classList.contains('bar-empty')")
       check('D4 empty track at total 0', empty, f'bar-empty {empty}')
+      # R15: every legal balance fits at 375 px with no horizontal scroll, and stays the headline
+      for currency, units in (('EUR', 2), ('JPY', 0), ('BHD', 3)):
+          for balance in (1_000_000_000, 2 ** 53 - 1):
+              call('POST', '/_test/reset', {"currency": currency, "minor_units": units, "users": [
+                  user('r', 'rich_and_long_handle', 'Maximiliane Okafor-Lindqvist', balance), user('p', 'l1_0o', 'Lin', 0)]})
+              rich = call('POST', '/auth/login', {"email": "rich_and_long_handle@example.com", "password": "correct horse"})['token']
+              poor = call('POST', '/auth/login', {"email": "l1_0o@example.com", "password": "correct horse"})['token']
+              part = min(1_000_000_000, balance // 4)
+              call('POST', '/authorizations', {"to_handle": "l1_0o", "amount": part}, rich, 'h1')
+              call('POST', '/requests', {"payer_handle": "rich_and_long_handle", "amount": 1_000_000_000}, poor, 'q1')
+              call('POST', '/payments', {"to_handle": "l1_0o", "amount": part}, rich, 'y1')
+              ph = b.new_page(viewport={'width': 375, 'height': 800})
+              login(ph, 'rich_and_long_handle')
+              widths = {}
+              for route, anchor in (('/', 'wallet-available'), ('/requests', 'incoming-list'), ('/authorizations', 'authorization-list')):
+                  ph.goto(B + route); ph.wait_for_selector(S(anchor), state='attached'); ph.wait_for_timeout(150)
+                  widths[route] = ph.evaluate('document.documentElement.scrollWidth')
+              ph.goto(B + '/split'); ph.wait_for_selector(S('split-amount'))
+              ph.fill(S('split-amount'), '9' * 10 + ('.' + '9' * units if units else '')); ph.fill(S('split-handles'), 'rich_and_long_handle,l1_0o')
+              ph.wait_for_timeout(100)
+              widths['/split'] = ph.evaluate('document.documentElement.scrollWidth')
+              ph.goto(B + '/'); ph.wait_for_selector(S('wallet-available'))
+              sizes = ph.evaluate("""['wallet-available', 'wallet-balance', 'wallet-held'].map(t => parseFloat(getComputedStyle(document.querySelector(`[data-testid=${t}]`)).fontSize))""")
+              check(f'R15 {currency} {balance}: no horizontal scroll at 375 px', all(w <= 375 for w in widths.values()), str(widths))
+              check(f'R15 {currency} {balance}: available stays the largest figure', sizes[0] > max(sizes[1:]), f'font sizes {sizes}')
+              ph.close()
       b.close()
 
 finally:

@@ -60,7 +60,11 @@ export function renderWallet(ctx, main) {
     fill(figures,
       h('div', { class: 'available' },
         h('p', { class: 'available-label' }, 'Available to spend'),
-        h('p', { class: 'available-figure', testid: 'wallet-available', data: { amount: String(me.available) } }, fmt(me.available))),
+        // --chars lets the stylesheet fit the headline to its width for any legal balance (up to 2^53).
+        h('p', {
+          class: 'available-figure', testid: 'wallet-available', data: { amount: String(me.available) },
+          style: `--chars: ${fmt(me.available).length}`,
+        }, fmt(me.available))),
       h('dl', { class: 'secondary-figures' },
         h('div', { class: 'figure-line' },
           h('dt', {}, 'Total'),
