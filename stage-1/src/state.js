@@ -3,9 +3,10 @@
 // JavaScript runs each request handler's synchronous part without interleaving, so a
 // method here that checks and then mutates cannot be interrupted by another request.
 // Every balance change goes through `movePayments`, which checks the §1 invariants for
-// the whole batch before it applies any of it.
+// the whole batch before it applies any of it, and every request status change goes
+// through `closeRequest`, so a request leaves `pending` once and moves money at most once.
 import { randomBytes } from 'node:crypto';
-import { insufficientFunds } from './errors.js';
+import { insufficientFunds, requestNotPending } from './errors.js';
 
 export class State {
   constructor({ currency, minorUnits }) {
@@ -105,6 +106,29 @@ export class State {
       this.addPayment(payment);
       return payment;
     });
+  }
+
+  /**
+   * The one way out of `pending`: to exactly one of paid, declined or cancelled.
+   * Paying moves the money through movePayments and links the payment; if that fails
+   * (insufficient funds) the request stays pending. Returns the payment, or null.
+   */
+  closeRequest(request, status, { visibility } = {}) {
+    if (request.status !== 'pending') throw requestNotPending();
+    if (status !== 'paid') {
+      request.status = status;
+      return null;
+    }
+    const [payment] = this.movePayments([{
+      fromUserId: request.payerId,
+      toUserId: request.requesterId,
+      amount: request.amount,
+      note: request.note,
+      visibility,
+    }], { requestId: request.id, createdAt: this.nextTimestamp() });
+    request.status = 'paid';
+    request.paymentId = payment.id;
+    return payment;
   }
 
   addPayment(payment) {

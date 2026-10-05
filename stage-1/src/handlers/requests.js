@@ -1,5 +1,5 @@
 // Money requests (§4, §8): create, pay, decline, cancel, list.
-import { forbidden, notFound, requestNotPending, selfRequest } from '../errors.js';
+import { forbidden, notFound, selfRequest } from '../errors.js';
 import { paginate, paging, queryChoice } from '../paging.js';
 import { REQUEST_STATUSES } from '../model.js';
 import { amount, note, requiredString, visibility } from '../validate.js';
@@ -54,16 +54,7 @@ export function payRequest({ state, user, body, params }) {
   const chosenVisibility = visibility(body);
   const request = findRequest(state, params.id);
   requireRole(request, user.id, 'payer');
-  if (request.status !== 'pending') throw requestNotPending();
-  const [payment] = state.movePayments([{
-    fromUserId: request.payerId,
-    toUserId: request.requesterId,
-    amount: request.amount,
-    note: request.note,
-    visibility: chosenVisibility,
-  }], { requestId: request.id, createdAt: state.nextTimestamp() });
-  request.status = 'paid';
-  request.paymentId = payment.id;
+  const payment = state.closeRequest(request, 'paid', { visibility: chosenVisibility });
   return paymentView(state, payment);
 }
 
@@ -72,10 +63,7 @@ function settleRequest(status, role) {
   return ({ state, user, params }) => {
     const request = findRequest(state, params.id);
     requireRole(request, user.id, role);
-    if (request.status !== status) {
-      if (request.status !== 'pending') throw requestNotPending();
-      request.status = status;
-    }
+    if (request.status !== status) state.closeRequest(request, status);
     return { status: 200, body: requestView(state, request) };
   };
 }
