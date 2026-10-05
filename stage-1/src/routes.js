@@ -13,7 +13,21 @@ import { createSettlement } from './handlers/settlements.js';
 import { createSplit } from './handlers/splits.js';
 import { exportSnapshot, health, importSnapshot, reset } from './handlers/testControl.js';
 
-export const routes = [
+/**
+ * Prepares route definitions for matching. An idempotent handler must be synchronous
+ * (idempotency.js): an async one is refused here, at startup, before it could ever
+ * apply a change that the key record then misses.
+ */
+export function defineRoutes(definitions) {
+  for (const route of definitions) {
+    if (route.idempotent && route.handler.constructor.name === 'AsyncFunction') {
+      throw new Error(`${route.method} ${route.path}: an idempotent handler must be synchronous`);
+    }
+  }
+  return definitions.map((route) => ({ ...route, segments: route.path.split('/').slice(1) }));
+}
+
+export const routes = defineRoutes([
   { method: 'GET', path: '/health', handler: health },
   { method: 'POST', path: '/_test/reset', handler: reset },
   { method: 'GET', path: '/_test/export', handler: exportSnapshot },
@@ -33,7 +47,7 @@ export const routes = [
     method: 'POST', path: '/settlements', handler: createSettlement,
     auth: true, operator: true, idempotent: true,
   },
-].map((route) => ({ ...route, segments: route.path.split('/').slice(1) }));
+]);
 
 /** The route for `method` and `pathname`, with its path parameters, or null. */
 export function matchRoute(method, pathname) {

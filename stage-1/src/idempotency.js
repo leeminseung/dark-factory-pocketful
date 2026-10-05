@@ -62,6 +62,7 @@ export function runIdempotent(state, { userId, method, route, params, key, body 
     if (record.fingerprint !== fingerprint) throw idempotencyKeyReuse();
     return { status: 200, body: record.response.body };
   }
+  // routes.js refuses async handlers at startup; this catches a sync one that returns a Promise.
   const responseBody = operation();
   if (responseBody instanceof Promise) throw new Error('idempotent operations must be synchronous');
   state.saveIdempotencyRecord(scope, { fingerprint, response: { status: 201, body: responseBody } });

@@ -7,7 +7,8 @@
   That one fact gives §1 atomicity, §7 "exactly one 201" for concurrent identical keys, and §11
   all-or-nothing settlements without locks. Disk state is not required (§2). The cost: the service is
   one process, and any future handler that awaits between check and change would break the
-  guarantee. `runIdempotent` refuses an operation that returns a Promise, to catch that.
+  guarantee. `defineRoutes` refuses an async idempotent handler at startup, before it could run (R8), and
+  `runIdempotent` still refuses a sync handler that returns a Promise.
 - **One money gate.** `State.movePayments` is the only code that changes a balance. It nets the
   batch per wallet, rejects with `insufficient_funds` if any wallet would end below zero, then sets
   each balance once. Single payments, paying a request and settlements all go through it.
@@ -56,4 +57,5 @@
 
 ## Unfixed non-blocking findings
 
-(none yet)
+- R4: ruled no change (decisions.md): pay with an empty body stays 400.
+- R10 (commit discipline) cannot change history; round-2 fixes are one defect per commit, each after its failing test.
