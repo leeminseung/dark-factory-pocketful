@@ -44,6 +44,9 @@
   rejection -> fell; round 4 with F2.
 - Round 4 started: product 04f3ca4 (stage folders = 2c1be66; both changed for F2), suite ba66344 on both folders;
   no screens touched, so no screen review.
+- Round 4: product 04f3ca4, suite ba66344: stage-2 858/858, stage-1 554/554; probes 106 receipt edits refused, 59
+  legitimate later states replay, stage-1 upgrade OK (work/reviews/acceptance-04f3ca4.md). Failing ids 0; no new
+  non-blocking -> re-review of 04f3ca4.
 
 ## Rulings
 - R1 (round 1, pay form changed and changed back after a confirmed payment replays it): BLOCKING. Text: "Submitting it
