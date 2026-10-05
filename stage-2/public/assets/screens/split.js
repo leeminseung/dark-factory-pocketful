@@ -14,16 +14,13 @@ export function renderSplit(ctx, main) {
   const { money } = ctx;
   const fmt = (minor) => formatAmount(minor, money);
   const identity = new RetryIdentity();
-  const edited = () => {
-    identity.forget();
-    renderPreview();
-  };
+  const edited = () => renderPreview();
   const amount = field({ label: 'Total amount', testid: 'split-amount', inputmode: 'decimal', suffix: money.currency, autocomplete: 'off', onInput: edited });
   const handles = field({
     label: 'Split between', testid: 'split-handles', autocomplete: 'off', onInput: edited,
     hint: "Handles separated by commas, in order. Include yourself if you're sharing the bill.",
   });
-  const note = field({ label: 'Note (optional)', testid: 'split-note', autocomplete: 'off', onInput: () => identity.forget() });
+  const note = field({ label: 'Note (optional)', testid: 'split-note', autocomplete: 'off' });
   const submit = button({ label: 'Send split requests', busyLabel: 'Sending…', testid: 'split-submit', type: 'submit' });
   const out = h('div', { class: 'form-feedback' });
   const preview = h('section', { class: 'plum-panel split-preview', testid: 'split-preview', 'aria-live': 'polite', 'aria-label': 'Each person pays' });
@@ -62,7 +59,7 @@ export function renderSplit(ctx, main) {
     const people = handlesOf(handles.input.value);
     const body = { amount: minor, participant_handles: people, note: note.input.value };
     submit.busy(true);
-    const result = await api('POST', '/splits', { body, key: identity.current() });
+    const result = await api('POST', '/splits', { body, key: identity.current(JSON.stringify(body)) });
     submit.busy(false);
     if (!ctx.view.alive) return;
     if (result.ok) {

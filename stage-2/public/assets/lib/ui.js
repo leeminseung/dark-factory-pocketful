@@ -91,15 +91,26 @@ export const emptyState = ({ testid, title, body, action, href, onAction }) => h
   h('a', { href, class: 'link', onclick: onAction }, action));
 
 /**
- * The retry identity of one write (stage-1 §7, stage 2 "Retries follow §7"): the key stays the
- * same while the inputs are unchanged, so resubmitting, or retrying after a lost response, is a
- * replay and moves money at most once. Any edit forgets it, so the next submit is a new write.
+ * The retry identity of one write (stage-1 §7, stage 2 "Retries follow §7"): the key belongs to
+ * the body last sent. Sending the same body again — a resubmit, a retry after a lost response,
+ * or a form edited and changed back — reuses it, so it is a replay and moves money at most once.
+ * A different body gets a new key, so it is a new write.
  */
 export class RetryIdentity {
-  constructor() { this.key = null; }
-  forget() { this.key = null; }
-  current() {
-    this.key ??= newKey();
+  constructor() {
+    this.body = null;
+    this.key = null;
+  }
+
+  /** The key for sending `bodyText` (the body as JSON text). */
+  current(bodyText) {
+    if (bodyText !== this.body) {
+      this.body = bodyText;
+      this.key = newKey();
+    }
     return this.key;
   }
+
+  /** True when `bodyText` is the body last sent, so sending it would be a retry. */
+  matches(bodyText) { return this.body !== null && bodyText === this.body; }
 }

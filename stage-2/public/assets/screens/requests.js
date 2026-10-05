@@ -103,7 +103,7 @@ export function renderRequests(ctx, main) {
     let options = {};
     if (action === 'pay') {
       if (!payIdentities.has(r.request_id)) payIdentities.set(r.request_id, new RetryIdentity());
-      options = { body: {}, key: payIdentities.get(r.request_id).current() };
+      options = { body: {}, key: payIdentities.get(r.request_id).current('{}') };
     }
     const result = await api('POST', `/requests/${encodeURIComponent(r.request_id)}/${action}`, options);
     if (!ctx.view.alive) return;

@@ -80,32 +80,37 @@ export function renderWallet(ctx, main) {
     const identity = new RetryIdentity();
     const out = h('div', { class: 'form-feedback' });
     let uncertain = false;
-    const forget = () => {
-      identity.forget();
-      if (uncertain) submit.setLabel(spec.label);
-      uncertain = false;
+    // While an answer is missing, the button says "Retry" exactly when the form is the one sent.
+    const edited = () => {
+      if (uncertain) submit.setLabel(identity.matches(JSON.stringify(bodyNow())) ? spec.retryLabel : spec.label);
     };
-    const handle = field({ label: 'Handle', testid: `${name}-handle`, hint: 'Their Pocketful handle, like ada', autocomplete: 'off', onInput: forget });
-    const amount = field({ label: 'Amount', testid: `${name}-amount`, inputmode: 'decimal', suffix: money.currency, autocomplete: 'off', onInput: forget });
-    const note = field({ label: 'Note (optional)', testid: `${name}-note`, autocomplete: 'off', onInput: forget });
+    const handle = field({ label: 'Handle', testid: `${name}-handle`, hint: 'Their Pocketful handle, like ada', autocomplete: 'off', onInput: edited });
+    const amount = field({ label: 'Amount', testid: `${name}-amount`, inputmode: 'decimal', suffix: money.currency, autocomplete: 'off', onInput: edited });
+    const note = field({ label: 'Note (optional)', testid: `${name}-note`, autocomplete: 'off', onInput: edited });
     const visibility = spec.visibility && field({
-      label: 'Who sees it', testid: `${name}-visibility`, onInput: forget,
+      label: 'Who sees it', testid: `${name}-visibility`, onInput: edited,
       options: [['public', 'Everyone (public)'], ['private', 'Only the two of you (private)']],
     });
     const submit = button({ label: spec.label, busyLabel: spec.busyLabel, testid: `${name}-submit`, variant: spec.variant, type: 'submit' });
     const errorTestid = `${name}-error`;
 
+    /** The body the form would send now; amount null when it is not a valid amount. */
+    function bodyNow() {
+      const body = { [spec.handleKey]: handle.input.value.trim(), amount: parseAmount(amount.input.value, money), note: note.input.value };
+      if (visibility) body.visibility = visibility.input.value;
+      return body;
+    }
+
     async function send(event) {
       event.preventDefault();
-      const minor = parseAmount(amount.input.value, money);
+      const body = bodyNow();
+      const minor = body.amount;
       if (minor === null) {
         fill(out, feedback('refused', errorTestid, amountHint(money)));
         return;
       }
-      const body = { [spec.handleKey]: handle.input.value.trim(), amount: minor, note: note.input.value };
-      if (visibility) body.visibility = visibility.input.value;
       submit.busy(true);
-      const result = await api('POST', spec.path, { body, key: identity.current() });
+      const result = await api('POST', spec.path, { body, key: identity.current(JSON.stringify(body)) });
       submit.busy(false);
       if (!ctx.view.alive) return;
       uncertain = false;
