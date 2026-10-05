@@ -16,7 +16,7 @@ import {
   authorizationExpired, authorizationNotOpen, captureExceedsAuthorization, insufficientFunds,
   requestNotPending,
 } from './errors.js';
-import { DEFAULT_AUTHORIZATION_TTL_SECONDS, TERMINAL_STATUSES } from './model.js';
+import { DEFAULT_AUTHORIZATION_TTL_SECONDS, TERMINAL_STATUSES, expiryOf } from './model.js';
 
 export class State {
   constructor({ currency, minorUnits, authorizationTtlSeconds = DEFAULT_AUTHORIZATION_TTL_SECONDS }) {
@@ -236,7 +236,7 @@ export class State {
       fromUserId, toUserId, amount, note, visibility,
       capturedAmount: 0,
       status: 'open',
-      expiresAt: createdAt + this.authorizationTtlSeconds * 1000,
+      expiresAt: expiryOf(createdAt, this.authorizationTtlSeconds),
       paymentIds: [],
       seeded: false,
       createdAt,

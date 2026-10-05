@@ -41,8 +41,20 @@ export const isRequestStatus = (value) => REQUEST_STATUSES.includes(value);
 /** A stored time in epoch ms that formats as RFC 3339: 1970 to the end of year 9999. */
 export const isTimestampMs = (value) => isIntegerIn(value, 0, MAX_TIMESTAMP_MS);
 export const isAuthorizationStatus = (value) => AUTHORIZATION_STATUSES.includes(value);
-/** A lifetime for new authorizations: a positive whole number of seconds whose expiry stays formattable. */
-export const isTtlSeconds = (value) => isIntegerIn(value, 1, Math.floor(MAX_TIMESTAMP_MS / 1000));
+/**
+ * When an authorization created at `createdAt` (epoch ms) with lifetime `ttlSeconds` expires:
+ * created_at plus the lifetime (stage 2), never past the last RFC 3339 instant. isTtlSeconds
+ * refuses any lifetime that would reach that bound, so the cap only guards the year 9999.
+ */
+export const expiryOf = (createdAt, ttlSeconds) => Math.min(createdAt + ttlSeconds * 1000, MAX_TIMESTAMP_MS);
+
+/**
+ * A lifetime for new authorizations: a positive whole number of seconds whose expiry, counted
+ * from `now`, still has an RFC 3339 form (stage-1 §3.4), so every expires_at the service writes
+ * can be exported and imported back (stage-1 §10).
+ */
+export const isTtlSeconds = (value, now = Date.now()) =>
+  isIntegerIn(value, 1, Math.floor((MAX_TIMESTAMP_MS - now) / 1000));
 export const isMinorUnits = (value) => MINOR_UNITS.includes(value);
 export const isTotalWithinLimit = (balances) =>
   balances.reduce((sum, balance) => sum + balance, 0) <= BALANCE_LIMIT;

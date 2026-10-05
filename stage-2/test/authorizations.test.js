@@ -290,3 +290,15 @@ test('concurrent holds, captures and voids behave as if run one at a time', asyn
   const totals = await Promise.all(['ada', 'bob', 'cy'].map(async (h) => (await me(w[h])).total));
   assert.equal(totals.reduce((x, y) => x + y), 13_000);
 });
+
+test('R2 S2-091 S1-024 S1-154: a lifetime whose expiry has no RFC 3339 form is refused; the largest valid one round-trips', async () => {
+  const reset = (fx) => call(srv.base, 'POST', '/_test/reset', { json: fx });
+  expectError(await reset(fixture({ authorization_ttl_seconds: 253402300799 })), 422, 'validation_failed');
+  const largest = Math.floor((Date.UTC(9999, 11, 31, 23, 59, 59) - Date.now()) / 1000) - 3600;
+  const w = await world(srv.base, fixture({ authorization_ttl_seconds: largest }));
+  const a = await authorize(w, 'ada', 'bob', 10);
+  assert.match(a.expires_at, RFC3339);
+  assert.match(a.expires_at, /^9999-/);
+  const snapshot = (await call(srv.base, 'GET', '/_test/export')).body;
+  assert.equal((await call(srv.base, 'POST', '/_test/import', { json: snapshot })).status, 204, 'the service accepts its own export');
+});
