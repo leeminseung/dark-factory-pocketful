@@ -1,8 +1,9 @@
 // POST /splits (§8) and the equal-split rule (§9).
-import { invalid, malformed, notFound } from '../errors.js';
+import { invalid, malformed } from '../errors.js';
 import { amount, note } from '../validate.js';
 import { formatTimestamp } from '../clock.js';
 import { requestView } from '../views.js';
+import { userWithHandle } from './handles.js';
 import { addPendingRequest } from './requests.js';
 
 /** Whole units summing to `total`, differing by at most one; the first ones get the extra units. */
@@ -30,11 +31,7 @@ export function createSplit({ state, user, body }) {
   const total = amount(body);
   const handles = participantHandles(body);
   const text = note(body);
-  const participants = handles.map((handle) => {
-    const participant = state.userByHandle(handle);
-    if (!participant) throw notFound(`no user has the handle ${JSON.stringify(handle)}`);
-    return participant;
-  });
+  const participants = handles.map((handle) => userWithHandle(state, handle));
   const shares = equalShares(total, participants.length);
   const createdAt = state.nextTimestamp();
   const requests = participants

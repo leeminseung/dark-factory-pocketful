@@ -1,5 +1,6 @@
 // Money requests (§4, §8): create, pay, decline, cancel, list.
 import { forbidden, notFound, selfRequest } from '../errors.js';
+import { counterparty } from './handles.js';
 import { paginate, paging, queryChoice } from '../paging.js';
 import { REQUEST_STATUSES } from '../model.js';
 import { amount, note, requiredString, visibility } from '../validate.js';
@@ -28,9 +29,7 @@ export function createRequest({ state, user, body }) {
   const payerHandle = requiredString(body, 'payer_handle');
   const value = amount(body);
   const text = note(body);
-  const payer = state.userByHandle(payerHandle);
-  if (!payer) throw notFound(`no user has the handle ${JSON.stringify(payerHandle)}`);
-  if (payer.id === user.id) throw selfRequest();
+  const payer = counterparty(state, user, payerHandle, selfRequest);
   const request = addPendingRequest(state, {
     requester: user, payer, amount: value, note: text, createdAt: state.nextTimestamp(),
   });
