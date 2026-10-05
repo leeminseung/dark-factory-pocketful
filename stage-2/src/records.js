@@ -9,6 +9,7 @@ import {
   charCount, isAuthorizationStatus, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
+import { formatTimestamp } from './clock.js';
 import { State } from './state.js';
 import { canonicalJson, parseJson } from './json.js';
 import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
@@ -137,6 +138,7 @@ export function checkRecords(r) {
 
   checkLinks(r);
   checkHolds(r);
+  checkReplays(r);
 }
 
 /** §2 stage 2: no user's unexpired open holds may exceed their total (available never negative). */
@@ -276,4 +278,89 @@ export function stateFromRecords(r) {
     state.saveIdempotencyRecord(scope, { fingerprint, response });
   }
   return state;
+}
+
+/*
+ * Stored replays (stage-1 §7, §10): a completed idempotent write keeps its request body
+ * (fingerprint) and its original response. Each must describe the record it answered for, or a
+ * replay would hand out a receipt for something that does not exist. One rule per idempotent route.
+ */
+const sameText = (value, expected) => value === expected;
+const isHandleOf = (users, id) => (handle) => users.get(id)?.handle === handle;
+
+/** The receipt fields a payment response must share with the payment record. */
+function describesPayment(view, p, users) {
+  return Boolean(p) && view.payment_id === p.id && view.from_user_id === p.fromUserId
+    && view.to_user_id === p.toUserId && view.amount === p.amount && view.note === p.note
+    && view.visibility === p.visibility && view.request_id === p.requestId
+    && view.settlement_id === p.settlementId
+    && (!Object.prototype.hasOwnProperty.call(view, 'authorization_id') || view.authorization_id === p.authorizationId)
+    && isHandleOf(users, p.fromUserId)(view.from_handle) && isHandleOf(users, p.toUserId)(view.to_handle)
+    && sameText(view.created_at, formatTimestamp(p.createdAt));
+}
+
+function describesRequest(view, q) {
+  return Boolean(q) && view.request_id === q.id && view.requester_id === q.requesterId
+    && view.payer_id === q.payerId && view.amount === q.amount && view.note === q.note
+    && sameText(view.created_at, formatTimestamp(q.createdAt));
+}
+
+const REPLAY_RULES = {
+  '/payments': ({ userId, body, view, find, users }) => {
+    const p = find.payment(view.payment_id);
+    return describesPayment(view, p, users) && p.fromUserId === userId && p.requestId === null
+      && p.settlementId === null && p.authorizationId === null
+      && body.amount === p.amount && isHandleOf(users, p.toUserId)(body.to_handle);
+  },
+  '/requests/:id/pay': ({ userId, params, view, find, users }) => {
+    const p = find.payment(view.payment_id);
+    return describesPayment(view, p, users) && p.fromUserId === userId && p.requestId === params.id;
+  },
+  '/authorizations/:id/capture': ({ userId, params, body, view, find, users }) => {
+    const p = find.payment(view.payment_id);
+    return Boolean(find.authorization(params.id)) && describesPayment(view, p, users)
+      && p.toUserId === userId && p.authorizationId === params.id
+      && (body.amount === undefined || body.amount === p.amount);
+  },
+  '/requests': ({ userId, body, view, find, users }) => {
+    const q = find.request(view.request_id);
+    return describesRequest(view, q) && q.requesterId === userId
+      && body.amount === q.amount && isHandleOf(users, q.payerId)(body.payer_handle);
+  },
+  '/splits': ({ userId, body, view, find }) => {
+    const sp = find.split(view.split_id);
+    return Boolean(sp) && sp.requesterId === userId && view.amount === sp.amount && body.amount === sp.amount
+      && Array.isArray(view.requests) && canonicalJson(view.requests.map((q) => q?.request_id)) === canonicalJson(sp.requestIds)
+      && view.requests.every((q) => describesRequest(q, find.request(q.request_id)))
+      && sameText(view.created_at, formatTimestamp(sp.createdAt));
+  },
+  '/settlements': ({ view, find, users }) => {
+    const st = find.settlement(view.settlement_id);
+    return Boolean(st) && Array.isArray(view.payments)
+      && canonicalJson(view.payments.map((p) => p?.payment_id)) === canonicalJson(st.paymentIds)
+      && view.payments.every((p) => describesPayment(p, find.payment(p.payment_id), users))
+      && sameText(view.committed_at, formatTimestamp(st.committedAt));
+  },
+  '/authorizations': ({ userId, body, view, find }) => {
+    const a = find.authorization(view.authorization_id);
+    return Boolean(a) && a.fromUserId === userId && view.amount === a.amount && body.amount === a.amount
+      && view.to_user_id === a.toUserId && sameText(view.created_at, formatTimestamp(a.createdAt))
+      && sameText(view.expires_at, formatTimestamp(a.expiresAt));
+  },
+};
+
+function checkReplays(r) {
+  const index = (list) => new Map(list.map((x) => [x.id, x]));
+  const maps = {
+    payment: index(r.payments), request: index(r.requests), split: index(r.splits),
+    settlement: index(r.settlements), authorization: index(r.authorizations),
+  };
+  const find = Object.fromEntries(Object.entries(maps).map(([kind, map]) => [kind, (id) => map.get(id)]));
+  const users = index(r.users);
+  r.idempotency.forEach((rec, i) => {
+    const [userId, , route, params] = JSON.parse(rec.scope);
+    const rule = REPLAY_RULES[route];
+    const ok = rule && rule({ userId, params, body: JSON.parse(rec.fingerprint), view: rec.response.body, find, users });
+    check(ok, `idempotency[${i}] does not describe the record it answered for`);
+  });
 }
