@@ -37,15 +37,10 @@ export function createRequest({ state, user, body }) {
   return requestView(state, request);
 }
 
-/**
- * The request `id` as seen by `user`. Requests are visible only to their two parties,
- * so a request between two other people is 404, as is an unknown one.
- */
-function visibleRequest(state, user, id) {
+/** The request `id`, or 404. Who may act on it is decided by requireRole: anyone else is 403. */
+function findRequest(state, id) {
   const request = state.requestsById.get(id);
-  if (!request || (request.payerId !== user.id && request.requesterId !== user.id)) {
-    throw notFound('no such request');
-  }
+  if (!request) throw notFound('no such request');
   return request;
 }
 
@@ -57,7 +52,7 @@ function requireRole(request, userId, role) {
 /** Idempotent: returns the 201 body, the new payment. */
 export function payRequest({ state, user, body, params }) {
   const chosenVisibility = visibility(body);
-  const request = visibleRequest(state, user, params.id);
+  const request = findRequest(state, params.id);
   requireRole(request, user.id, 'payer');
   if (request.status !== 'pending') throw requestNotPending();
   const [payment] = state.movePayments([{
@@ -75,7 +70,7 @@ export function payRequest({ state, user, body, params }) {
 /** Moves a pending request to `status`; repeating the same move is a no-op, not an error. */
 function settleRequest(status, role) {
   return ({ state, user, params }) => {
-    const request = visibleRequest(state, user, params.id);
+    const request = findRequest(state, params.id);
     requireRole(request, user.id, role);
     if (request.status !== status) {
       if (request.status !== 'pending') throw requestNotPending();
