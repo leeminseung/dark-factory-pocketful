@@ -45,7 +45,7 @@ export function renderSplit(ctx, main) {
       h('ol', { class: 'share-rows' }, people.map((handle, i) => {
         const self = handle === ctx.me.handle;
         return h('li', { class: 'share-row' },
-          h('span', { class: 'share-handle' }, handle, self && ' (you)'),
+          h('span', { class: 'share-handle' }, h('span', { class: 'share-handle-text' }, handle), self && ' (you)'),
           self && h('span', { class: 'on-plum-soft share-paid' }, 'Already paid'),
           h('span', { class: 'share-amount', testid: `split-share-${handle}` }, fmt(shares[i])));
       })),

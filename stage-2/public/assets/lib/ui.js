@@ -69,6 +69,9 @@ export function chip(status) {
   return h('span', { class: `chip ${className}` }, iconName ? icon(iconName) : hatchSwatch(), word);
 }
 
+/** A handle as text that never breaks inside the word (design.md §5). */
+export const handleText = (handle, className = '') => h('span', { class: `handle ${className}`.trim() }, handle);
+
 /** Privacy marker: padlock "Private" or people "Public". */
 export const privacy = (visibility) => (visibility === 'private'
   ? h('span', { class: 'privacy private' }, icon('lock'), 'Private')

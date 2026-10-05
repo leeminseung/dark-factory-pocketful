@@ -5,7 +5,7 @@ import { hatchSwatch } from '../lib/icons.js';
 import { amountHint, decimalOf, formatAmount, parseAmount } from '../lib/money.js';
 import { sentence, uncertainAbout } from '../lib/messages.js';
 import { deadline, friendlyTime } from '../lib/time.js';
-import { LatestRead, RetryIdentity, button, chip, emptyState, feedback, field, loadingRows, plate } from '../lib/ui.js';
+import { LatestRead, RetryIdentity, handleText, button, chip, emptyState, feedback, field, loadingRows, plate } from '../lib/ui.js';
 
 export function renderAuthorizations(ctx, main) {
   const { money } = ctx;
@@ -62,7 +62,7 @@ export function renderAuthorizations(ctx, main) {
       plate(other, outgoing ? 'sent' : 'received', { held: open }),
       h('div', { class: 'row-main' },
         h('div', { class: 'row-head' },
-          h('p', { class: 'row-title' }, outgoing ? `Reserved for ${other}` : `${other} reserved for you`),
+          h('p', { class: 'row-title' }, outgoing ? ['Reserved for ', handleText(other)] : [handleText(other), ' reserved for you']),
           h('p', { class: 'row-amount', testid: `authorization-amount-${id}` }, fmt(a.amount))),
         a.note && h('p', { class: 'row-note' }, a.note),
         open && a.captured_amount > 0 && h('p', { class: 'meta' }, `Collected so far ${fmt(a.captured_amount)}`),

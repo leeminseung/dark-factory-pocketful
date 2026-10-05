@@ -169,7 +169,14 @@ select.input { appearance: auto; }
 .row { display: flex; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--hairline); min-width: 0; }
 .row-main { display: grid; gap: 4px; flex: 1 1 auto; min-width: 0; }
 .row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; min-width: 0; }
-.row-title { font-size: 20px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.row-title { font-size: 20px; font-weight: 600; min-width: 0; }
+.handle, .share-handle-text { white-space: nowrap; }
+@media (max-width: 600px) {
+  /* The amount takes its own line when it cannot share one with the title (design.md §5). */
+  .row-head { flex-wrap: wrap; }
+  .row-amount { margin-left: auto; }
+  .share-row { flex-wrap: wrap; }
+}
 .row-title .self { color: var(--graphite); font-weight: 400; }
 .row-amount { font-size: 20px; font-weight: 600; white-space: nowrap; }
 .row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
@@ -207,7 +214,7 @@ select.input { appearance: auto; }
 .split-preview { display: grid; gap: 16px; }
 .share-rows { display: grid; gap: 8px; }
 .share-row { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
-.share-handle { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.share-handle { font-weight: 600; min-width: 0; }
 .share-paid { font-size: 13px; }
 .share-amount { margin-left: auto; font-size: 20px; font-weight: 600; white-space: nowrap; }
 @media (min-width: 960px) {

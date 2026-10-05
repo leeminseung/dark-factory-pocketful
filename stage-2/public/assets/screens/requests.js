@@ -4,7 +4,7 @@ import { fill, h } from '../lib/dom.js';
 import { formatAmount } from '../lib/money.js';
 import { sentence, uncertainAbout } from '../lib/messages.js';
 import { timeEl } from '../lib/time.js';
-import { LatestRead, RetryIdentity, button, chip, emptyState, feedback, loadingRows, plate } from '../lib/ui.js';
+import { LatestRead, RetryIdentity, handleText, button, chip, emptyState, feedback, loadingRows, plate } from '../lib/ui.js';
 
 export function renderRequests(ctx, main) {
   const { money } = ctx;
@@ -70,7 +70,7 @@ export function renderRequests(ctx, main) {
       plate(other, incoming ? 'received' : 'sent'),
       h('div', { class: 'row-main' },
         h('div', { class: 'row-head' },
-          h('p', { class: 'row-title' }, incoming ? `${other} asks you for` : `You asked ${other} for`),
+          h('p', { class: 'row-title' }, incoming ? [handleText(other), ' asks you for'] : ['You asked ', handleText(other), ' for']),
           h('p', { class: 'row-amount', testid: `request-amount-${r.request_id}` }, fmt(r.amount))),
         r.note && h('p', { class: 'row-note' }, r.note),
         h('p', { class: 'meta row-meta' }, chip(r.status), h('span', {}, 'Asked ', timeEl(r.created_at))),

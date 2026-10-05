@@ -5,7 +5,7 @@ import { hatchSwatch, icon } from '../lib/icons.js';
 import { amountHint, formatAmount, parseAmount } from '../lib/money.js';
 import { moneyRefusal, uncertainAbout } from '../lib/messages.js';
 import { clockNow, timeEl } from '../lib/time.js';
-import { LatestRead, RetryIdentity, button, emptyState, feedback, field, loadingRows, plate, privacy } from '../lib/ui.js';
+import { LatestRead, RetryIdentity, button, handleText, emptyState, feedback, field, loadingRows, plate, privacy } from '../lib/ui.js';
 
 // The three money forms differ only in these facts.
 const FORMS = {
@@ -157,7 +157,7 @@ export function renderWallet(ctx, main) {
     fill(feedBody, h('ol', { class: 'rows', testid: 'activity-list' }, state.payments.map((p) => {
       const direction = p.to_handle === mine ? 'received' : p.from_handle === mine ? 'sent' : 'between';
       const other = direction === 'received' ? p.from_handle : p.to_handle;
-      const who = (handleText) => h('span', { class: handleText === mine ? 'self' : null }, handleText);
+      const who = (handle) => handleText(handle, handle === mine ? 'self' : '');
       return h('li', { class: 'row', testid: `activity-item-${p.payment_id}`, data: { visibility: p.visibility } },
         plate(other, direction),
         h('div', { class: 'row-main' },
