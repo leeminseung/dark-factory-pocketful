@@ -18,6 +18,8 @@
 - Suite ready at 3e0b6ba (510 tests); command `work/acceptance/run.sh stage-1 1`. Test-designer's informal preview on
   f636c55: 10 failures (S1-059, S1-073, S1-070, S1-158, S1-058) forwarded to implementer before round 1.
 
+- List complete at 190 rows (S1-187..S1-190 added in 2ef3db0); suite at 94de59b (553 tests).
+
 ## Rounds
 
 ## Rulings
