@@ -17,6 +17,8 @@
   errors; seeded authorization validation (reset and import, 422 changing nothing); upgrade import carries ttl (stage-1
   export -> 600 and empty list; stage-2 export keeps ttl).
 - Design direction work/design.md (1af11a0) sent to implementer with summary; screens may start.
+- Suite ready cd1c47b; list complete at 164 rows (S2-165..S2-168 in 7c802f1); suite now 47edfcf (858 tests: 554
+  stage-1 + 304 stage-2). Command `work/acceptance/run.sh stage-2 2`. Validity check recorded in the list.
 
 ## Rounds
 
