@@ -28,6 +28,9 @@
   S3-RISK-1 confirmed closed. Count 0; reviewer blocking R1 -> round 2; all sent.
 - Round 2 started: product 236d7f8 (stage folders = 8e2cb2a), suite 16f6bb0; acceptance + R1 probes; screen check of
   the D13 change.
+- Round 2: product 236d7f8, suite 16f6bb0 (1143/1143; supplied --stage 4 isolated 3x pass; R1 probes hold;
+  work/reviews/acceptance-236d7f8.md). D13 fixed, no new findings (work/reviews/design-236d7f8.md). Failing ids 0, no
+  new non-blocking -> final review on 236d7f8.
 
 ## Rulings
 - R6 (non-string payment_id in a batch -> 422): no change; D4-6 (accepted) allows 400 or 422 for wrong-type fields.
