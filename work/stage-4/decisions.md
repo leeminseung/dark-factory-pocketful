@@ -13,6 +13,8 @@
   (`--all --mode isolated`, stage check run more than once) -> accept.
 - Handoff sent to implementer, test-designer and product-designer in 3 numbered parts (full stage-4 spec; carry-forward
   in part 2).
+- List check (4044345, 37 rows): asked for S4-038..S4-041 — concurrent refunds within the limit; correction_batch_id
+  on revisions (null otherwise; survives import); refund_exceeds_payment inside a batch; refunds in history.
 
 ## Rounds
 
