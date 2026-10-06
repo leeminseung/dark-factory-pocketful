@@ -113,4 +113,4 @@ worktree), with `work/acceptance/run.sh <worktree>/stage-3 4 -k stage_4`.
   - `test_single_corrections_and_members` (S4-024 / S3-054): members are still
     `linked_payment_immutable` for single corrections;
   - `test_correction_debit_against_available` (S4-015 / S3-070): already a stage-3 rule.
-- S4-038..S4-041 tests (added after review): all 11 fail on the same stage-3 build.
+- S4-038..S4-041 tests (added after review): all 10 fail on the same stage-3 build.
