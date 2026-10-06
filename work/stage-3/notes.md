@@ -28,10 +28,11 @@ The stage-1 and stage-2 notes still apply to everything stage 3 did not change.
 
   A correction's recorded time is the service clock, at least 1 ms after the payment's previous
   revision.
-- **Query instants keep sub-millisecond precision** (clock.js `parseInstant`). An inclusive bound
-  (`as_of`, `known_at`) uses the millisecond at or before the instant. A half-open bound (`from`,
-  `to`) uses the millisecond at or after it. Stored times are whole milliseconds, so neither rounds
-  the wrong way.
+- **One instant rule** (R6, R10; clock.js):
+  - every instant the service reads is RFC 3339 with an offset, and "T"/"Z" may be lowercase;
+  - every instant is truncated to the millisecond, stored or queried, so one instant names one
+    millisecond everywhere. Truncation keeps "at exactly that instant" inclusive for clients that
+    send microseconds.
 - **The statement's default `to`** is "now", taken as the end of the read's own millisecond. A
   payment already made in that millisecond is on the statement; an explicit `to` stays strictly
   exclusive.
@@ -68,4 +69,11 @@ The stage-1 and stage-2 notes still apply to everything stage 3 did not change.
 
 ## Unfixed non-blocking findings
 
-(none yet)
+- R5: a voided authorization from a stage-2 export gets the earliest closed_at it can have (its last
+  capture, or its creation), because a stage-2 export does not record when a void happened. Its past
+  held is understated from then until the real void.
+- R11: 7d115a2 also changed the statement's default `to` (to cover the read's own millisecond)
+  without naming the cause. Cause: with `to` = the read's instant exclusive, a payment stamped in
+  that same millisecond was left out of a statement read just after it. It is covered by
+  corrections.test.js 'a correction that makes a past balance negative', whose before/after
+  statements depend on it.
