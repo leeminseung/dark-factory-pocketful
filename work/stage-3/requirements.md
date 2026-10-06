@@ -22,7 +22,7 @@ stage-3 build. Their tests hold because they make no corrections and send no tem
 
 | ID | Quote | Area | Tests | Status |
 |---|---|---|---|---|
-| S3-001 | "The requirements from stages 1 and 2 continue to apply, with the additions below." | stage |  | open |
+| S3-001 | "The requirements from stages 1 and 2 continue to apply, with the additions below." | stage | the whole stage-1 and stage-2 suites (run.sh runs suites 1..N against the stage-N build) | tested |
 | S3-002 | "Every payment's `created_at` is an RFC 3339 instant with an offset identifying when it moved money. Every endpoint returning a payment includes it." | timestamps | test_history.py::test_every_payment_carries_created_at | tested |
 | S3-003 | "`GET /activity` retains its existing ordering by this field." | timestamps | test_history.py::test_activity_ordering_with_seeded_times | tested |
 | S3-004 | "Seeded payments may supply `created_at`; omission uses reset time, before subsequent API-created payments." | fixture | test_history.py::test_seeded_created_at_is_kept<br>test_history.py::test_seeded_without_created_at_uses_reset_time<br>test_snapshots_holds_import.py::test_large_reset_with_seeded_times | tested |
