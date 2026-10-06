@@ -1,8 +1,8 @@
-# Pocketful — stage 3
+# Pocketful — stage 4
 
 An HTTP service for payments, requests, splits, an activity feed, operator settlements,
-payment authorizations (holds, captures, voids), historical balances, statements and payment
-corrections, with browser screens.
+payment authorizations (holds, captures, voids), historical balances, statements, payment
+corrections, refunds and operator correction batches, with browser screens.
 Node.js 22, no third-party packages; all state is held in memory.
 
 ## Build and start
@@ -10,7 +10,7 @@ Node.js 22, no third-party packages; all state is held in memory.
 From this folder:
 
 ```sh
-docker build -t pocketful-stage-3 . && docker run --rm -e PORT=8080 -p 8080:8080 pocketful-stage-3
+docker build -t pocketful-stage-4 . && docker run --rm -e PORT=8080 -p 8080:8080 pocketful-stage-4
 ```
 
 The service listens on `0.0.0.0:$PORT` (default `8080`) and answers `GET /health` with
@@ -46,7 +46,7 @@ starts the service on a free port, seeds it and checks the screens at 375 px and
 | `src/main.js` | entry point |
 | `src/server.js` | HTTP plumbing: body parsing, authentication, idempotency wrapper, error responses |
 | `src/routes.js` | every endpoint and what must be established before its handler runs |
-| `src/state.js` | the in-memory state and `movePayments`, the one gate every balance change goes through |
+| `src/state.js` | the in-memory state; `movePayments`, the one gate every balance change goes through, and `correctPayments`, the one gate for corrections |
 | `src/validate.js`, `src/paging.js` | shared field rules and list parameters |
 | `src/idempotency.js` | §7 key resolution and replay |
 | `src/fixture.js`, `src/snapshot.js` | reset fixtures, export and import |

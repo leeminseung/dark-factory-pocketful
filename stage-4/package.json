@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Pocketful stage 1: payments, requests, splits, activity feed and settlements over HTTP",
+  "description": "Pocketful stage 4: payments, requests, splits, settlements, holds, history, corrections and refunds over HTTP",
   "engines": { "node": ">=22" },
   "scripts": {
     "start": "node src/main.js",
