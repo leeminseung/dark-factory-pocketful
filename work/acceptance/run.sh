@@ -51,8 +51,6 @@ INNER_PORT=9137   # deliberately not 8080: proves PORT is honoured
 cleanup() {
   docker logs "$NAME" >"$OUT/service.log" 2>&1 || true
   docker rm -f "$NAME" >/dev/null 2>&1 || true
-  docker logs "$NAME-prev" >"$OUT/previous-service.log" 2>&1 || true
-  docker rm -f "$NAME-prev" >/dev/null 2>&1 || true
   local ids
   ids="$(docker ps -aq --filter "label=pocketful-acceptance=$RUN_ID")"
   [ -n "$ids" ] && docker rm -f $ids >/dev/null 2>&1 || true
@@ -88,23 +86,29 @@ PY
 ) || { echo "service never became healthy"; docker logs "$NAME" | tail -50; exit 1; }
 echo "healthy after ${START_SECONDS}s at $BASE_URL"
 
-# The previous stage's folder next to this one (stage-K -> stage-(K-1)), for upgrade tests.
+# Every earlier stage folder next to this one (stage-K -> stage-1 .. stage-(K-1)), for the
+# upgrade tests: STAGE_<n>_URL for each, and PREV_BASE_URL for stage-(K-1).
 PREV_BASE_URL=""
+EARLIER_ENV=()
 BASE_NAME="$(basename "$STAGE_DIR")"
 if [[ "$BASE_NAME" =~ ^stage-([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -gt 1 ]; then
-  PREV_DIR="$(dirname "$STAGE_DIR")/stage-$((BASH_REMATCH[1] - 1))"
-  if [ -d "$PREV_DIR" ]; then
-    docker build -q -t "$RUN_ID-prev:latest" "$PREV_DIR" >"$OUT/previous-build.log" 2>&1 || { cat "$OUT/previous-build.log"; echo "PREVIOUS BUILD FAILED"; exit 1; }
-    PREV_PORT="$(free_port)"
-    docker run -d --name "$NAME-prev" --label "pocketful-acceptance=$RUN_ID" \
-      --cpus 2 --memory 2g -e PORT="$INNER_PORT" -p "127.0.0.1:$PREV_PORT:$INNER_PORT" "$RUN_ID-prev:latest" >/dev/null
-    PREV_BASE_URL="http://127.0.0.1:$PREV_PORT"
+  K="${BASH_REMATCH[1]}"
+  for n in $(seq 1 $((K - 1))); do
+    PREV_DIR="$(dirname "$STAGE_DIR")/stage-$n"
+    [ -d "$PREV_DIR" ] || continue
+    docker build -q -t "$RUN_ID-s$n:latest" "$PREV_DIR" >"$OUT/stage-$n-build.log" 2>&1 || { cat "$OUT/stage-$n-build.log"; echo "STAGE-$n BUILD FAILED"; exit 1; }
+    P="$(free_port)"
+    docker run -d --name "$NAME-s$n" --label "pocketful-acceptance=$RUN_ID" \
+      --cpus 2 --memory 2g -e PORT="$INNER_PORT" -p "127.0.0.1:$P:$INNER_PORT" "$RUN_ID-s$n:latest" >/dev/null
+    URL="http://127.0.0.1:$P"
     for _ in $(seq 1 240); do
-      curl -fsS "$PREV_BASE_URL/health" >/dev/null 2>&1 && break
+      curl -fsS "$URL/health" >/dev/null 2>&1 && break
       sleep 0.25
     done
-    echo "previous stage $PREV_DIR at $PREV_BASE_URL"
-  fi
+    EARLIER_ENV+=("STAGE_${n}_URL=$URL")
+    [ "$n" -eq $((K - 1)) ] && PREV_BASE_URL="$URL"
+    echo "earlier stage $PREV_DIR at $URL"
+  done
 fi
 
 DIRS=()
@@ -113,8 +117,8 @@ for n in $(seq 1 "$SUITE"); do
 done
 
 set +e
-BASE_URL="$BASE_URL" IMAGE_TAG="$TAG" RUN_ID="$RUN_ID" START_SECONDS="$START_SECONDS" \
-STAGE_DIR="$STAGE_DIR" PREV_BASE_URL="$PREV_BASE_URL" \
+env BASE_URL="$BASE_URL" IMAGE_TAG="$TAG" RUN_ID="$RUN_ID" START_SECONDS="$START_SECONDS" \
+  STAGE_DIR="$STAGE_DIR" PREV_BASE_URL="$PREV_BASE_URL" ${EARLIER_ENV[@]+"${EARLIER_ENV[@]}"} \
   "$VENV/bin/python" -m pytest -p no:cacheprovider -q -rfE \
     --rootdir "$HERE/tests" -c "$HERE/pytest.ini" \
     --junitxml "$OUT/junit.xml" "${DIRS[@]}" "$@" 2>&1 | tee "$OUT/pytest.log"

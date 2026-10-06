@@ -17,6 +17,14 @@ from datetime import datetime
 import httpx
 import pytest
 
+# stage helper modules (s2.py, s3.py, ...) are importable from every stage's tests
+_HERE = os.path.dirname(os.path.abspath(__file__))
+for _d in sorted(os.listdir(_HERE)):
+    if _d.startswith("stage_") and os.path.isdir(os.path.join(_HERE, _d)):
+        import sys as _sys
+        if os.path.join(_HERE, _d) not in _sys.path:
+            _sys.path.append(os.path.join(_HERE, _d))
+
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8080")
 IMAGE_TAG = os.environ.get("IMAGE_TAG", "")
 RUN_ID = os.environ.get("RUN_ID", "manual")
