@@ -153,9 +153,17 @@ test('S4 batches: completeness before funds, current funds on the combined effec
     payments: [seeded('p_in', 'u_ada', 'u_bob', 1), seeded('p_out', 'u_bob', 'u_cy', 2), seeded('p_back', 'u_cy', 'u_bob', 3)],
   }));
   const income = { payment_id: 'p_in', amount: 500, created_at: '2025-01-01T00:00:00Z' };
-  expectError(await batch(hist.cy, [item(income, { effective_at: '2025-01-02T12:00:00Z' })]), 409, 'historical_overdraft');
+  const before = { balances: await balances(hist), statement: (await hist.bob.get('/statement?limit=10')).body };
+  const histKey = newKey();
+  expectError(await batch(hist.cy, [item(income, { effective_at: '2025-01-02T12:00:00Z' })], histKey), 409, 'historical_overdraft');
+  // R3: the refusal changed nothing, and its key is still free.
   assert.equal((await revisionsOf(hist.ada, income)).length, 1);
-  assert.equal((await batch(hist.cy, [item(income, { effective_at: '2025-01-01T12:00:00Z' })])).status, 201);
+  assert.deepEqual(await balances(hist), before.balances);
+  const after = (await hist.bob.get('/statement?limit=10')).body;
+  assert.deepEqual({ ...after, snapshot: null }, { ...before.statement, snapshot: null }, 'the statement is as it was');
+  const fine = await batch(hist.cy, [item(income, { effective_at: '2025-01-01T12:00:00Z' })], histKey);
+  assert.equal(fine.status, 201, 'the refused key is a first use');
+  assert.equal(fine.body.revisions[0].effective_at, '2025-01-01T12:00:00.000+00:00');
 });
 
 test('S4 batches: earlier snapshots keep paging their frozen entries; new statements show the batch', async () => {
