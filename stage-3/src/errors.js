@@ -33,4 +33,10 @@ export const authorizationExpired = () =>
   new ApiError(409, 'authorization_expired', 'the authorization has expired');
 export const captureExceedsAuthorization = () =>
   new ApiError(422, 'capture_exceeds_authorization', 'amount is above the uncaptured remainder');
+export const staleRevision = () =>
+  new ApiError(409, 'stale_revision', 'expected_revision is not the payment\'s current revision');
+export const historicalOverdraft = () =>
+  new ApiError(409, 'historical_overdraft', 'the correction would make a balance negative at some point in the past');
+export const linkedPaymentImmutable = () =>
+  new ApiError(422, 'linked_payment_immutable', 'settlement members and captures cannot be corrected');
 export const selfRequest = () => new ApiError(422, 'self_request', 'cannot request from yourself');

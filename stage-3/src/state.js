@@ -13,9 +13,10 @@
 // open (holding) authorizations exact; `expireDue` closes those whose time has come.
 import { randomBytes } from 'node:crypto';
 import {
-  authorizationExpired, authorizationNotOpen, captureExceedsAuthorization, insufficientFunds,
-  requestNotPending,
+  authorizationExpired, authorizationNotOpen, captureExceedsAuthorization, historicalOverdraft,
+  insufficientFunds, requestNotPending,
 } from './errors.js';
+import { currentRevision, firstOverdraft } from './ledger.js';
 import {
   DEFAULT_AUTHORIZATION_TTL_SECONDS, TERMINAL_STATUSES, expiryOf, isDue, remainingOf,
 } from './model.js';
@@ -192,6 +193,42 @@ export class State {
     request.status = 'paid';
     request.paymentId = payment.id;
     return payment;
+  }
+
+  // ---- corrections (stage 3) --------------------------------------------
+
+  /**
+   * Appends a revision to `payment` and moves the difference from its current amount between
+   * the same two wallets in the same step: an increase debits the sender, a decrease the
+   * receiver. Refused with insufficient_funds when the debited wallet cannot afford it now, and
+   * otherwise with historical_overdraft when, under the latest revisions, either party's total or
+   * available would be negative at any past boundary. The caller runs this in a transaction, so a
+   * refusal leaves balances, revisions and everything else as they were.
+   */
+  correctPayment(payment, { amount, effectiveAt, reason }) {
+    const previous = currentRevision(payment);
+    const delta = amount - previous.amount;
+    const [payerId, payeeId] = delta >= 0 ? [payment.fromUserId, payment.toUserId] : [payment.toUserId, payment.fromUserId];
+    if (this.availableOf(payerId) < Math.abs(delta)) throw insufficientFunds();
+    // Recorded times for one payment strictly increase, and the service clock follows.
+    const recordedAt = Math.max(this.nextTimestamp(), previous.recordedAt + 1);
+    const clockBefore = this.lastTimestampMs;
+    this.remember(() => { this.lastTimestampMs = clockBefore; });
+    this.lastTimestampMs = recordedAt;
+    const revision = { revision: previous.revision + 1, amount, effectiveAt, recordedAt, reason };
+    const revisionsBefore = payment.revisions;
+    this.remember(() => { payment.revisions = revisionsBefore; });
+    payment.revisions = [...payment.revisions, revision];
+    for (const [userId, change] of [[payerId, -Math.abs(delta)], [payeeId, Math.abs(delta)]]) {
+      const user = this.users.get(userId);
+      const before = user.balance;
+      this.remember(() => { user.balance = before; });
+      user.balance += change;
+    }
+    for (const userId of [payment.fromUserId, payment.toUserId]) {
+      if (firstOverdraft(this, userId) !== null) throw historicalOverdraft();
+    }
+    return revision;
   }
 
   // ---- holds and authorizations ----------------------------------------

@@ -99,6 +99,16 @@ export function authorizationView(state, authorization) {
   };
 }
 
+/** One revision of a payment (stage 3): the correction receipt, and each row of GET …/revisions. */
+export const revisionView = (payment, rev) => ({
+  payment_id: payment.id,
+  revision: rev.revision,
+  amount: rev.amount,
+  effective_at: formatTimestamp(rev.effectiveAt),
+  recorded_at: formatTimestamp(rev.recordedAt),
+  reason: rev.reason,
+});
+
 export const sessionView = (user, token) => ({
   user_id: user.id,
   display_name: user.displayName,

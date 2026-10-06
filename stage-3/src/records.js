@@ -9,7 +9,10 @@ import {
   charCount, expiryOf, isAuthorizationStatus, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
-import { authorizationView, paymentView, requestView, settlementView, splitView } from './views.js';
+import { parseTimestamp } from './clock.js';
+import {
+  authorizationView, paymentView, requestView, revisionView, settlementView, splitView,
+} from './views.js';
 import { firstOverdraft } from './ledger.js';
 import { State } from './state.js';
 import { canonicalJson, parseJson } from './json.js';
@@ -444,6 +447,14 @@ const REPLAY_RULES = {
   '/settlements': ({ receipt, records, view }) => {
     const st = records.settlements.get(receipt.settlement_id);
     return Boolean(st) && sameReceipt(receipt, view.settlement(st));
+  },
+  '/payments/:id/corrections': ({ userId, params, body, receipt, records }) => {
+    const p = records.payments.get(params.id);
+    const rev = p?.revisions[receipt.revision - 1];
+    return Boolean(rev) && rev.revision > 1 && p.fromUserId === userId
+      && body.expected_revision === rev.revision - 1 && body.amount === rev.amount
+      && parseTimestamp(body.effective_at) === rev.effectiveAt && body.reason === rev.reason
+      && sameReceipt(receipt, revisionView(p, rev));
   },
   '/authorizations': ({ userId, body, receipt, records, view }) => {
     const a = records.authorizations.get(receipt.authorization_id);

@@ -74,9 +74,10 @@ export function statement({ state, user, query, now }) {
   const from = queryInstant(query, 'from');
   const to = queryInstant(query, 'to');
   const knownAt = queryInstant(query, 'known_at');
-  // [from, to): a payment at from counts, one at to does not.
+  // [from, to): a payment at from counts, one at to does not. The default `to` is now, taken to
+  // cover the read's own millisecond, so a payment already made in it is on the statement.
   const fromMs = from ? from.ceil : null;
-  const toMs = to ? to.ceil : now;
+  const toMs = to ? to.ceil : now + 1;
   if (fromMs !== null && fromMs > toMs) throw invalid('from must not be after to');
   const result = statementOf(state, user.id, { from: fromMs, to: toMs, knownAt: knownAt ? knownAt.floor : undefined });
   const snapshot = {
