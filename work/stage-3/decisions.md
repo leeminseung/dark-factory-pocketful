@@ -38,6 +38,9 @@
 - Round 3 started: product 744bfd4 (stage folders = e03b834), suite cc78f4d; acceptance + probes of R13-R16, R23.
 - Round 3: product 744bfd4, suite cc78f4d (1050/1050); supplied --stage 3 --mode isolated 3x pass; probes R13-R16,
   R23 hold (work/reviews/acceptance-744bfd4.md). Failing ids 0; no new non-blocking -> re-review of 744bfd4.
+- Re-review of 744bfd4: PASS, blocking 0 (work/reviews/review-744bfd4-recheck.md, 52df22e). R13-R16, S3-043/S3-009
+  fixed; supplied --all --mode isolated: stage-1/ claims 1, stage-2/ claims 2, stage-3/ passes 1-3, fails 4, claims 3;
+  --stage 3 --mode isolated passed 5 of 5.
 
 ## Rulings
 - Seeded payment `created_at: "not-a-time"` (stage-1 test test_fixture_fields_outside_the_format_are_ignored fails on
@@ -54,11 +57,35 @@
 - R6 (lowercase t/z): non-blocking; implementer's choice, but one rule for every instant the service parses.
 
 ## Acceptance
+- Accepted revision: 744bfd408a8737d6d1ada12ad6ee1b842c3199d9 (stage folders = e03b834), status: passed.
+- Reviewer report: work/reviews/review-744bfd4-recheck.md; acceptance work/reviews/acceptance-744bfd4.md; screens
+  work/reviews/design-6a17d63.md (regression review; screen code unchanged since).
+- Requirement rows covered: stage 3 72 of 72 (S3-024 not testable, S3-001 by earlier suites); stage 2 164/164; stage 1 190/190.
+- stage-1/ and stage-2/ unchanged since 048a821.
 
 ## Open failures, risks, unfixed non-blocking findings
-At loop stop (e03c437), for the final review (reviewer), then implementer:
-- F1 (S3-043, S3-009, blocking): instants truncated to the millisecond place sub-ms effective times early; keep full
-  precision for comparisons.
-- Residual (implementer notes): at the clock bound 9899-12-30 a same-millisecond write can join a later snapshot.
+- Open failures: none.
+- S1-RISK-1 (carried; next: reviewer if auth changes).
+- S3-RISK-1 (implementer notes; next: implementer): at the fixed clock bound 9899-12-30 a same-millisecond write could
+  join a later snapshot (now sequence-based watermark; recheck).
+- S3-R17 (non-blocking; next: implementer): snapshot memory grows ~0.7-1.9 KB per first read until reset.
+- S3-R22 (non-blocking; next: test-designer to watch): leap-second instants refused with 422.
+- S3-R24 (non-blocking; next: implementer): GET /requests and GET /authorizations can repeat rows under writes.
+- S3-R5 (non-blocking): a stage-2 export carries no void time; closed_at is inferred.
+- S3-R18, S3-R11 (history), S2-R23 (kept), S1-R17 (kept).
 
 ## Retro
+- Rejected/failed: (1) snapshot design — rendered copies grew memory without bound (R1), then the fix advanced the
+  clock on each read (R13); (2) instants truncated to milliseconds placed sub-ms effective times early (R10 -> R14,
+  S3-043/S3-009); (3) same-millisecond payments with random ids broke statement order, failing a supplied check
+  intermittently (R16); plus an O(n^2) overdraft check (R2).
+- Caught by: R1-R3 round-1 review; F1 round-2 probe; R13-R16 final-review probe and isolated supplied check.
+- Slipped late: R16 passed the suite, the implementer's runs and three supplied runs; R13 came from a fix and passed
+  everything until a 23k-read probe.
+- Rounds: 3 plus round-1 review, final review and re-review. The loop stopped after round 2 (0 -> 1), restarted after
+  the rejection (7 -> 0), and ended when the re-review passed.
+- Watch (implementer): a read must never change state (clock, counters); any ordering by time needs a deterministic
+  tie-break by creation order.
+- Watch (test-designer): standing tests for same-millisecond ordering (bursts, loop runs), sub-millisecond instants,
+  and clock drift after many reads; run the supplied stage check several times in isolated mode each round.
+- Watch (reviewer): run the supplied isolated check more than once at final review (intermittent failures).

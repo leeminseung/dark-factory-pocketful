@@ -32,3 +32,16 @@ Defects that passed the acceptance suite and were caught later by a review. Read
   must be sent. (Stage 2, S2-R1, round-1 review.)
 - Render the headline money figure at the largest legal balance in every currency at 375 px: no horizontal scroll.
   (Stage 2, S2-R15, final review.)
+- Read a cached or snapshotted view many thousands of times (50 in flight), then write: memory must stay bounded and
+  the server clock must not drift; new records must not be stamped in the future. (Stage 3, S3-R1 / S3-R13, round-1
+  review and final review.)
+- Send instants with digits below the millisecond (seeded times, effective times, as_of, window bounds) and query
+  between them: nothing may count before it happened; neither truncation nor rounding is safe. (Stage 3, S3-R14 /
+  S3-043 / S3-009, round-2 probe and final review.)
+- Make several writes in the same millisecond, then read a list ordered by time with an id tie-break: they must come
+  out in creation order every time; run the check in a loop. (Stage 3, S3-R16, final review — intermittent supplied
+  check failure.)
+- Run a check that is quadratic in history (per-boundary scans) at 5000+ records with 20-50 concurrent writes and at
+  20000-record reset/import: all within the time limits. (Stage 3, S3-R2, round-1 review.)
+- Export and import, then use a token/handle issued before the export (pagination snapshots, not just bearer tokens):
+  it must still work. (Stage 3, S3-R3, round-1 review.)
