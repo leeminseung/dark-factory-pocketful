@@ -236,7 +236,7 @@ export class State {
 
   // ---- holds and authorizations ----------------------------------------
 
-  /** The sum of the user's open holds. */
+  /** The sum of the user's open holds now (ledger.js heldAt answers the same question for any instant). */
   heldBy(userId) {
     let held = 0;
     for (const a of this.openAuthorizations) if (a.fromUserId === userId) held += remainingOf(a);

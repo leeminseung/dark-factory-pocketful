@@ -48,7 +48,7 @@ export function balanceAt(book, userId, asOf, knownAt = NEVER) {
  * known, and at expires_at in any case, the deadline being known from creation on. One closed at
  * or before its creation (a fixture's closed one) never held anything.
  */
-export function heldBy(book, authorization, t, knownAt = NEVER) {
+export function authorizationHoldAt(book, authorization, t, knownAt = NEVER) {
   const a = authorization;
   if (a.closedAt !== null && a.closedAt <= a.createdAt && a.paymentIds.length === 0) return 0;
   if (a.createdAt > t || a.createdAt > knownAt) return 0;
@@ -62,10 +62,13 @@ export function heldBy(book, authorization, t, knownAt = NEVER) {
   return Math.max(0, a.amount - captured);
 }
 
-/** The user's held total at `t` as known at `knownAt`. */
+/**
+ * The user's held total at `t` as known at `knownAt` (history). The current held total is
+ * State.heldBy: the remainders of the open authorizations, which this equals at now.
+ */
 export function heldAt(book, userId, t, knownAt = NEVER) {
   let held = 0;
-  for (const a of book.authorizations) if (a.fromUserId === userId) held += heldBy(book, a, t, knownAt);
+  for (const a of book.authorizations) if (a.fromUserId === userId) held += authorizationHoldAt(book, a, t, knownAt);
   return held;
 }
 
