@@ -188,3 +188,28 @@ test('R13: reading statements never moves the service clock', async () => {
   const p = (await w.ada.post('/payments', { to_handle: 'bob', amount: 1 }, newKey())).body;
   assert.ok(Date.parse(p.created_at) <= Date.now(), `a new payment is not stamped in the future: ${p.created_at}`);
 });
+
+test('R15 S3 "Existing snapshots remain unchanged": an edited export cannot add a payment to an old snapshot', async () => {
+  const w = await world(srv.base, history());
+  const first = (await w.ada.get(`/statement${q({ limit: 10 })}`)).body;
+  const exported = (await call(srv.base, 'GET', '/_test/export')).body;
+  const s = exported.state;
+  // A consistent extra payment, recorded at the clock, as an editor would add it.
+  const t = s.last_timestamp_ms;
+  const added = {
+    id: 'p_added', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 1, note: '', visibility: 'public',
+    request_id: null, settlement_id: null, authorization_id: null, created_at_ms: t,
+    revisions: [{ revision: 1, amount: 1, effective_at_ms: t, recorded_at_ms: t, reason: '', seq: s.record_sequence + 1 }],
+  };
+  const users = s.users.map((u) => ({ ...u, balance: u.balance + (u.id === 'u_ada' ? -1 : u.id === 'u_bob' ? 1 : 0) }));
+  const withPayment = { ...exported, state: { ...s, users, payments: [...s.payments, added], record_sequence: s.record_sequence + 1 } };
+  assert.equal((await call(srv.base, 'POST', '/_test/import', { json: withPayment })).status, 204);
+  assert.deepEqual((await w.ada.get(`/statement${q({ snapshot: first.snapshot, limit: 10 })}`)).body, first);
+  const bad = {
+    'watermark beyond the recorded count': { ...exported, state: { ...s, snapshots: s.snapshots.map((x) => ({ ...x, seq: s.record_sequence + 1 })) } },
+    'recording number reused': { ...exported, state: { ...s, payments: s.payments.map((p) => ({ ...p, revisions: p.revisions.map((r) => ({ ...r, seq: 1 })) })) } },
+  };
+  for (const [label, envelope] of Object.entries(bad)) {
+    expectError(await call(srv.base, 'POST', '/_test/import', { json: envelope }), 422, 'validation_failed', label);
+  }
+});
