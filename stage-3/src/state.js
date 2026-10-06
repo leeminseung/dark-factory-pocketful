@@ -43,6 +43,8 @@ export class State {
     this.idempotency = new Map(); // scope -> { fingerprint, response }
     this.snapshots = new Map(); // statement snapshot token -> frozen statement (stage 3; until reset)
     this.lastTimestampMs = 0;
+    this.timestampFloorMs = 0; // the earliest the next record may be stamped (see nextTimestamp)
+    this.paymentSequence = 0; // payments created so far through the API; orders their ids
     this.journal = null; // undo steps of the running transaction, newest last
   }
 
@@ -75,8 +77,22 @@ export class State {
   nextTimestamp() {
     const before = this.lastTimestampMs;
     this.remember(() => { this.lastTimestampMs = before; });
-    this.lastTimestampMs = Math.max(Date.now(), this.lastTimestampMs);
+    this.lastTimestampMs = Math.max(Date.now(), this.lastTimestampMs, this.timestampFloorMs);
     return this.lastTimestampMs;
+  }
+
+  /**
+   * A payment id that sorts in creation order (stage 3: statement ties order by payment id, and
+   * two payments can share a millisecond): a fixed-width base-36 sequence, then random characters.
+   */
+  newPaymentId() {
+    const before = this.paymentSequence;
+    this.remember(() => { this.paymentSequence = before; });
+    for (;;) {
+      this.paymentSequence += 1;
+      const id = `p_${this.paymentSequence.toString(36).padStart(9, '0')}${randomBytes(3).toString('base64url')}`;
+      if (!this.paymentsById.has(id)) return id;
+    }
   }
 
   /** A fresh opaque id that collides with no existing id of that kind. */
@@ -158,7 +174,7 @@ export class State {
     this.shiftBalances(net);
     return transfers.map((t) => {
       const payment = {
-        id: this.newId('p', (id) => this.paymentsById.has(id)),
+        id: this.newPaymentId(),
         fromUserId: t.fromUserId,
         toUserId: t.toUserId,
         amount: t.amount,

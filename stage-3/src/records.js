@@ -394,6 +394,14 @@ export function stateFromRecords(r) {
     currency: r.currency, minorUnits: r.minorUnits, authorizationTtlSeconds: r.authorizationTtlSeconds,
   });
   state.lastTimestampMs = r.lastTimestampMs;
+  // Seeded payments without created_at carry the reset time; API payments come after them
+  // (stage 3), so nothing new is stamped in the millisecond they share with the clock.
+  if (r.payments.some((p) => p.createdAt === r.lastTimestampMs)) state.timestampFloorMs = r.lastTimestampMs + 1;
+  // New payment ids continue the creation order of those already made through the API.
+  state.paymentSequence = r.payments.reduce((n, p) => {
+    const m = /^p_([0-9a-z]{9})/.exec(p.id);
+    return m ? Math.max(n, parseInt(m[1], 36)) : n;
+  }, 0);
   for (const u of r.users) {
     state.addUser({
       id: u.id, email: u.email, passwordHash: u.passwordHash, displayName: u.displayName,
