@@ -27,6 +27,10 @@
   no findings (work/reviews/design-6a17d63.md). Round-1 review work/reviews/review-6a17d63-round1.md (standards + spec
   briefs/raw present): R1, R2, R3 blocking; R4-R12 non-blocking. Count 0; reviewer blocking -> round 2; all sent.
 - Round 2 started: product e03c437 (stage-3 = 123af1b), suite cc78f4d; acceptance + probes of R1-R3, R6, R10.
+- Round 2: product e03c437, suite cc78f4d (1050/1050). Probes (work/reviews/acceptance-e03c437.md): R1, R2, R3, R6 hold;
+  F1 fails S3-043/S3-009 — sub-millisecond effective_at truncated, so a correction effective at .3435 counts at as_of
+  .3434 (blocking: "`as_of` retains its inclusive meaning"). Count 1 vs previous 0 -> did not fall -> loop stopped;
+  final review on e03c437.
 
 ## Rulings
 - Seeded payment `created_at: "not-a-time"` (stage-1 test test_fixture_fields_outside_the_format_are_ignored fails on
@@ -45,5 +49,9 @@
 ## Acceptance
 
 ## Open failures, risks, unfixed non-blocking findings
+At loop stop (e03c437), for the final review (reviewer), then implementer:
+- F1 (S3-043, S3-009, blocking): instants truncated to the millisecond place sub-ms effective times early; keep full
+  precision for comparisons.
+- Residual (implementer notes): at the clock bound 9899-12-30 a same-millisecond write can join a later snapshot.
 
 ## Retro
