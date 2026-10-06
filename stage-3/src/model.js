@@ -67,6 +67,15 @@ export const remainingOf = (authorization) =>
   (authorization.status === 'open' ? authorization.amount - authorization.capturedAmount : 0);
 /** A correction's reason (stage 3): a string of 1 to 200 characters. */
 export const isReason = (value) => typeof value === 'string' && charCount(value) >= 1 && charCount(value) <= MAX_NOTE_CHARS;
+/** Settlement members and captures are linked payments: they cannot be corrected (stage 3). */
+export const isLinkedPayment = (payment) => payment.settlementId !== null || payment.authorizationId !== null;
+/**
+ * When a fixture's authorization closed (stage 3: seeded closed holds keep no lifecycle): an
+ * open one has not; an expired one at its expiry or the reset, whichever came first; any other
+ * at the reset (its creation).
+ */
+export const seededClosedAt = ({ status, expiresAt, createdAt }) =>
+  (status === 'open' ? null : status === 'expired' ? Math.min(expiresAt, createdAt) : createdAt);
 export const isMinorUnits = (value) => MINOR_UNITS.includes(value);
 export const isTotalWithinLimit = (balances) =>
   balances.reduce((sum, balance) => sum + balance, 0) <= BALANCE_LIMIT;

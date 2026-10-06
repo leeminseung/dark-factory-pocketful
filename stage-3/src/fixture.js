@@ -7,7 +7,7 @@
 import { invalid, malformed } from './errors.js';
 import { hashSeededPasswords } from './passwords.js';
 import { parseTimestamp } from './clock.js';
-import { DEFAULT_AUTHORIZATION_TTL_SECONDS } from './model.js';
+import { DEFAULT_AUTHORIZATION_TTL_SECONDS, seededClosedAt } from './model.js';
 import { checkRecords, openingBalances, stateFromRecords } from './records.js';
 import { isPlainObject } from './validate.js';
 
@@ -109,7 +109,7 @@ function readAuthorization(raw, where, resetAt) {
     paymentIds: [],
     seeded: true,
     createdAt,
-    closedAt: status === 'open' ? null : status === 'expired' ? Math.min(expiresAt, createdAt) : createdAt,
+    closedAt: seededClosedAt({ status, expiresAt, createdAt }),
   };
 }
 

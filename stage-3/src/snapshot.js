@@ -5,7 +5,7 @@
 // the same rules reset uses, so a defective snapshot is 422 and the live state stays as it was.
 import { invalid } from './errors.js';
 import { isPasswordHash } from './passwords.js';
-import { DEFAULT_AUTHORIZATION_TTL_SECONDS } from './model.js';
+import { DEFAULT_AUTHORIZATION_TTL_SECONDS, seededClosedAt } from './model.js';
 import { checkRecords, openingBalances, stateFromRecords } from './records.js';
 import { isPlainObject } from './validate.js';
 
@@ -102,7 +102,7 @@ const revisionsOf = (revs) => (Array.isArray(revs) ? revs.map((rev) => (isPlainO
  */
 function closedAtOf(a, payments) {
   if (a.status === 'open') return null;
-  if (a.seeded && a.status === 'expired') return Math.min(a.expiresAt, a.createdAt);
+  if (a.seeded && a.status === 'expired') return seededClosedAt(a);
   if (a.status === 'expired') return a.expiresAt;
   const captureTimes = (Array.isArray(a.paymentIds) ? a.paymentIds : [])
     .map((id) => payments.find((p) => p.id === id)?.createdAt).filter((t) => typeof t === 'number');

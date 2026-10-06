@@ -2,7 +2,7 @@
 import { parseTimestamp } from '../clock.js';
 import { forbidden, invalid, linkedPaymentImmutable, notFound, staleRevision } from '../errors.js';
 import { currentRevision } from '../ledger.js';
-import { MIN_TIMESTAMP_MS, isIntegralNumber, isReason, isRecordAmount } from '../model.js';
+import { MIN_TIMESTAMP_MS, isIntegralNumber, isLinkedPayment, isReason, isRecordAmount } from '../model.js';
 import { revisionView } from '../views.js';
 
 /**
@@ -28,7 +28,7 @@ export function createCorrection({ state, user, body, params, now }) {
   const payment = state.paymentsById.get(params.id);
   if (!payment) throw notFound('no such payment');
   if (payment.fromUserId !== user.id) throw forbidden('only the payment\'s sender may correct it');
-  if (payment.settlementId !== null || payment.authorizationId !== null) throw linkedPaymentImmutable();
+  if (isLinkedPayment(payment)) throw linkedPaymentImmutable();
   if (terms.expected !== currentRevision(payment).revision) throw staleRevision();
   const revision = state.correctPayment(payment, terms);
   return revisionView(payment, revision);

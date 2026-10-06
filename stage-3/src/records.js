@@ -6,14 +6,14 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, expiryOf, isAuthorizationStatus, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, expiryOf, isAuthorizationStatus, isLinkedPayment, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { parseInstant, parseTimestamp } from './clock.js';
 import {
   authorizationView, paymentView, requestView, revisionView, settlementView, splitView,
 } from './views.js';
-import { firstOverdraft } from './ledger.js';
+import { currentRevision, firstOverdraft } from './ledger.js';
 import { State } from './state.js';
 import { canonicalJson, parseJson } from './json.js';
 import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
@@ -177,7 +177,7 @@ function checkRevisions(p, at) {
   const [first] = revs;
   check(first.amount === p.amount && first.effectiveAt === p.createdAt && first.recordedAt === p.createdAt,
     `${at}.revisions[0] is not the payment as made`);
-  check(revs.length === 1 || (p.settlementId === null && p.authorizationId === null),
+  check(revs.length === 1 || !isLinkedPayment(p),
     `${at} is a linked payment and cannot have corrections`);
 }
 
@@ -239,7 +239,7 @@ function checkSnapshots(r, isUser) {
 function checkLedger(r) {
   const net = new Map(r.users.map((u) => [u.id, u.openingBalance]));
   for (const p of r.payments) {
-    const amount = p.revisions.at(-1).amount;
+    const { amount } = currentRevision(p);
     net.set(p.fromUserId, net.get(p.fromUserId) - amount);
     net.set(p.toUserId, net.get(p.toUserId) + amount);
   }

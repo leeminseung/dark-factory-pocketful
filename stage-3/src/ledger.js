@@ -43,6 +43,12 @@ export function balanceAt(book, userId, asOf, knownAt = NEVER) {
 }
 
 /**
+ * An authorization that closed at or before its creation, with no capture, never held anything
+ * (a fixture's closed one, model.js seededClosedAt).
+ */
+const neverHeld = (a) => a.closedAt !== null && a.closedAt <= a.createdAt && a.paymentIds.length === 0;
+
+/**
  * What one authorization held at `t`, as known at `knownAt`. A hold starts at creation; each
  * capture reduces it at its time; it ends at its closing event (final capture, void) once that is
  * known, and at expires_at in any case, the deadline being known from creation on. One closed at
@@ -50,7 +56,7 @@ export function balanceAt(book, userId, asOf, knownAt = NEVER) {
  */
 export function authorizationHoldAt(book, authorization, t, knownAt = NEVER) {
   const a = authorization;
-  if (a.closedAt !== null && a.closedAt <= a.createdAt && a.paymentIds.length === 0) return 0;
+  if (neverHeld(a)) return 0;
   if (a.createdAt > t || a.createdAt > knownAt) return 0;
   const closingKnown = a.closedAt !== null && a.closedAt <= knownAt ? a.closedAt : NEVER;
   if (Math.min(closingKnown, a.expiresAt) <= t) return 0;
@@ -102,7 +108,7 @@ export function statement(book, userId, { from, to, knownAt = NEVER }) {
 
 /** One authorization's effect on the payer's held total, as (time, change) events, all known. */
 function holdEvents(book, a) {
-  if (a.closedAt !== null && a.closedAt <= a.createdAt && a.paymentIds.length === 0) return [];
+  if (neverHeld(a)) return [];
   const events = [{ time: a.createdAt, held: a.amount }];
   const close = Math.min(a.closedAt ?? NEVER, a.expiresAt);
   let captured = 0;
