@@ -96,6 +96,7 @@ export function authorizationView(state, authorization) {
     payment_id: authorization.paymentIds.at(-1) ?? null,
     payment_ids: [...authorization.paymentIds],
     created_at: formatTimestamp(authorization.createdAt),
+    closed_at: authorization.closedAt === null ? null : formatTimestamp(authorization.closedAt),
   };
 }
 

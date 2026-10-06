@@ -397,9 +397,12 @@ export function stateFromRecords(r) {
  * One rule per idempotent route also ties the receipt to the scope's user and to the request body.
  */
 
+/** Fields a receipt from an earlier stage lacks; one that lacks such a field matches when it is null. */
+const LATER_FIELDS = new Set(['authorization_id', 'closed_at']);
+
 /**
- * Stage-1 receipts predate authorization_id; one that lacks it matches when the record has none.
- * Everything else must be equal as a JSON value.
+ * Stage-1 receipts predate authorization_id, stage-2 ones closed_at; a receipt that lacks either
+ * matches when the record's value is null. Everything else must be equal as a JSON value.
  */
 function sameReceipt(stored, expected) {
   const strip = (exp, got) => {
@@ -407,7 +410,7 @@ function sameReceipt(stored, expected) {
     if (!isPlainObject(exp)) return exp;
     const out = {};
     for (const [key, value] of Object.entries(exp)) {
-      const legacy = key === 'authorization_id' && value === null && isPlainObject(got) && !Object.hasOwn(got, key);
+      const legacy = LATER_FIELDS.has(key) && value === null && isPlainObject(got) && !Object.hasOwn(got, key);
       if (!legacy) out[key] = strip(value, isPlainObject(got) ? got[key] : undefined);
     }
     return out;
@@ -467,7 +470,7 @@ const REPLAY_RULES = {
 function creationViews(r, records) {
   const atCreation = {
     request: (q) => ({ ...q, status: 'pending', paymentId: null }),
-    authorization: (a) => ({ ...a, status: 'open', capturedAmount: 0, paymentIds: [] }),
+    authorization: (a) => ({ ...a, status: 'open', capturedAmount: 0, paymentIds: [], closedAt: null }),
   };
   // A state-shaped object over the records, as views.js reads it; requests as they were created.
   const shape = {
