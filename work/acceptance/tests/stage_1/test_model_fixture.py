@@ -374,11 +374,11 @@ def test_seeded_pending_request_is_payable_and_cancelled_is_not(seeded):
 @pytest.mark.req("S1-025", "S1-052")
 def test_fixture_fields_outside_the_format_are_ignored(api, reset):
     """S1-025 unknown fields are ignored: a fixture carrying extra fields still loads."""
-    fx = fixture(users=[user("ada", 100, role="admin", created_at="garbage"),
+    fx = fixture(users=[user("ada", 100, role="admin", joined_on="garbage"),
                         user("bob", 0)])
     fx["payments"] = [{"id": "p_x", "from_user_id": "u_ada", "to_user_id": "u_bob",
                        "amount": 1, "note": "", "visibility": "public",
-                       "created_at": "not-a-time", "colour": 1}]
+                       "booked_on": "not-a-time", "colour": 1}]
     fx["extra_top_level"] = {"a": 1}
     reset(fx)
     c = api()
