@@ -50,3 +50,11 @@ The stage-1 to stage-3 notes still apply to everything stage 4 did not change.
 - S3-RISK-1 (a write in the same millisecond at the clock bound joining a later snapshot) is
   closed. Since stage-3 R13 a snapshot's watermark is a recording number, so any later write has
   a higher number and stays out, at any clock value.
+
+## Unfixed non-blocking findings
+
+- R5, R7: no change, as ruled. The stated precedence covers item errors, completeness, funds and
+  history. Distinct payment_ids is a rule about the batch's shape, checked first. The same-instant
+  rule is checked after completeness, as above.
+- R6: no change (D4-6). A wrong JSON type in a refund or batch item may be 400 or 422; amount is
+  422 by §5's endpoint rule.
