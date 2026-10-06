@@ -37,12 +37,18 @@ The stage-1 and stage-2 notes still apply to everything stage 3 did not change.
   exclusive.
 - **`from` after `to` is 422**: in such a window, opening + deltas = closing (statement rule 3) could
   not hold.
-- **Snapshots are frozen results.** A first read stores the whole computed window (opening, closing,
-  every entry as shown), and snapshot reads only page it. A frozen result is the only way to honour
-  "freezes … at that read" when `known_at` is in the future.
-- **Snapshots are not exported.** An import replaces the state, so tokens from before an import are
-  404, like tokens from before a reset. §10's list of what to preserve has no snapshots, and a frozen
-  read cannot be checked against the records it came from.
+- **Snapshots are a window and a watermark** (R1). A snapshot stores its owner, from, to, the known_at it
+  echoes, and the watermark min(known_at, the read's instant). Each page recomputes the window from
+  the payments' revisions, which never change once recorded. `State.freezeReadAt` stamps everything
+  recorded after the read strictly later, so no later revision falls under the watermark. Memory per
+  snapshot is constant.
+- **Clock-bound residual:** at the clock's fixed bound (MAX_CLOCK_MS) the clock cannot move past a
+  read. A write stamped at the bound in the same millisecond as a later snapshot read would join
+  that snapshot. Reaching this needs a state imported with its clock at 9899-12-30.
+- **Snapshots are exported and imported** (R3, ruling f9a6a09): "Tokens last until reset", and import
+  is not a reset. Import checks each one: a known owner; a valid window with from ≤ to; a watermark
+  not after the clock; an echo, when present, at or after the watermark. A stage-1 or stage-2 export
+  has none.
 - **closed_at:**
   - a final capture closes at its capture payment;
   - a void closes at its own time;

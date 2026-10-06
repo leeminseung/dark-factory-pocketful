@@ -53,6 +53,10 @@ export function exportState(state) {
       id: st.id, committed_at_ms: st.committedAt, payment_ids: st.paymentIds,
     })),
     idempotency: [...state.idempotency].map(([scope, record]) => ({ scope, ...record })),
+    // Statement snapshots are state too: their tokens last until reset (stage 3).
+    snapshots: [...state.snapshots].map(([token, sn]) => ({
+      token, user_id: sn.userId, from_ms: sn.from, to_ms: sn.to, known_at_ms: sn.knownAt, known_at_text: sn.knownAtText,
+    })),
   };
   // A JSON round trip detaches every nested object from the live state.
   return { track: TRACK, format_version: FORMAT_VERSION, state: JSON.parse(JSON.stringify(snapshot)) };
@@ -71,7 +75,7 @@ const has = (obj, name) => Object.prototype.hasOwnProperty.call(obj, name);
 /** True when `state` has any field stage 3 added. */
 function hasStage3Field(state) {
   const some = (name, test) => Array.isArray(state[name]) && state[name].some((x) => isPlainObject(x) && test(x));
-  return some('users', (u) => has(u, 'opening_balance')) || some('payments', (p) => has(p, 'revisions'))
+  return has(state, 'snapshots') || some('users', (u) => has(u, 'opening_balance')) || some('payments', (p) => has(p, 'revisions'))
     || some('authorizations', (a) => has(a, 'closed_at_ms'))
     || some('idempotency', (rec) => typeof rec.scope === 'string' && rec.scope.includes('/corrections"'));
 }
@@ -165,6 +169,9 @@ export function importState(envelope) {
     idempotency: list(s, 'idempotency').map((rec) => ({
       scope: rec.scope, fingerprint: rec.fingerprint, response: rec.response,
     })),
+    snapshots: fromStage3 ? list(s, 'snapshots').map((sn) => ({
+      token: sn.token, userId: sn.user_id, from: sn.from_ms, to: sn.to_ms, knownAt: sn.known_at_ms, knownAtText: sn.known_at_text,
+    })) : [],
   };
   if (!fromStage3) {
     records.users = openingBalances(records.users, records.payments);

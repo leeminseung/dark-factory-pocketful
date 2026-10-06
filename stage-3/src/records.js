@@ -9,7 +9,7 @@ import {
   charCount, expiryOf, isAuthorizationStatus, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
-import { parseTimestamp } from './clock.js';
+import { parseInstant, parseTimestamp } from './clock.js';
 import {
   authorizationView, paymentView, requestView, revisionView, settlementView, splitView,
 } from './views.js';
@@ -38,6 +38,7 @@ import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
  *                   expiresAt, paymentIds, seeded, createdAt, closedAt }
  *                 (seeded: came from a fixture, whose `captured` ones name no payment)
  *   idempotency:  [{ scope, fingerprint, response }]
+ *   snapshots:    [{ token, userId, from, to, knownAt, knownAtText }]   (statement snapshots, stage 3)
  */
 
 function check(condition, message) {
@@ -151,6 +152,7 @@ export function checkRecords(r) {
   checkLinks(r);
   checkHolds(r);
   checkHistory(r);
+  checkSnapshots(r, isUser);
   checkReplays(r);
 }
 
@@ -213,6 +215,24 @@ function checkHistory(r) {
     const overdraft = firstOverdraft(book, u.id, paymentsOf.get(u.id));
     check(overdraft === null, `${u.id} history has a negative ${overdraft?.what} balance`);
   }
+}
+
+/**
+ * A statement snapshot (stage 3) is its owner, its window [from, to) and a watermark: what the
+ * first read could know, min(known_at, the read's instant), which cannot be later than the clock.
+ * Its known_at echo, when there is one, is an instant at or after the watermark.
+ */
+function checkSnapshots(r, isUser) {
+  r.snapshots.forEach((sn, i) => {
+    const at = `snapshots[${i}]`;
+    check(typeof sn.token === 'string' && sn.token !== '' && isUser(sn.userId), `${at} owner or token is invalid`);
+    check((sn.from === null || isTimestampMs(sn.from)) && isTimestampMs(sn.to) && (sn.from === null || sn.from <= sn.to),
+      `${at} window is invalid`);
+    check(isTimestampMs(sn.knownAt) && sn.knownAt <= r.lastTimestampMs, `${at} watermark is invalid`);
+    const echo = sn.knownAtText === null ? null : parseInstant(sn.knownAtText);
+    check(sn.knownAtText === null || (echo !== null && echo.floor >= sn.knownAt), `${at} known_at is invalid`);
+  });
+  requireUnique(r.snapshots.map((sn) => sn.token), 'snapshot token');
 }
 
 /** Each wallet's balance is its opening balance plus its payments at their latest revisions. */
@@ -390,6 +410,7 @@ export function stateFromRecords(r) {
   for (const { scope, fingerprint, response } of r.idempotency) {
     state.saveIdempotencyRecord(scope, { fingerprint, response });
   }
+  for (const { token, ...snapshot } of r.snapshots) state.addSnapshot(token, snapshot);
   return state;
 }
 

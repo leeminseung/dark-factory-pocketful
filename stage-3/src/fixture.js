@@ -136,6 +136,7 @@ export function parseFixture(body) {
     authorizations: read(body, 'authorizations', 'array', 'fixture', [])
       .map((a, i) => readAuthorization(a, `authorizations[${i}]`, now)),
     idempotency: [],
+    snapshots: [],
   };
   records.users = openingBalances(records.users, records.payments);
   checkRecords(records);

@@ -69,7 +69,7 @@ export function client(base, token) {
 
 /** An export as the stage-2 service wrote it: without the fields stage 3 added. */
 export function asStage2Export(envelope) {
-  const s = envelope.state;
+  const { snapshots, ...s } = envelope.state;
   return {
     ...envelope,
     state: {

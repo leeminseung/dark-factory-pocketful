@@ -126,3 +126,30 @@ test('R1 R12: a snapshot pages the same result after a payment, a correction and
   const fresh = (await w.ada.get('/statement')).body;
   assert.notDeepEqual(fresh.entries, first.entries, 'a new read sees the changes');
 });
+
+test('R3 S3 "Tokens last until reset": snapshots survive export and import, still bound to their owner', async () => {
+  const w = await world(srv.base, history());
+  const first = (await w.ada.get(`/statement${q({ limit: 1, known_at: '2099-01-01T00:00:00+00:00' })}`)).body;
+  await w.ada.post('/payments', { to_handle: 'bob', amount: 7 }, newKey());
+  const exported = (await call(srv.base, 'GET', '/_test/export')).body;
+  await call(srv.base, 'POST', '/_test/reset', { json: fixture() });
+  assert.equal((await call(srv.base, 'POST', '/_test/import', { json: exported })).status, 204);
+  const page = (await w.ada.get(`/statement${q({ snapshot: first.snapshot, limit: 1 })}`)).body;
+  assert.deepEqual(page, first);
+  expectError(await w.bob.get(`/statement${q({ snapshot: first.snapshot })}`), 404, 'not_found');
+  const s = exported.state;
+  const edit = (over) => ({ ...exported, state: { ...s, snapshots: s.snapshots.map((x) => ({ ...x, ...over })) } });
+  const bad = {
+    'unknown owner': edit({ user_id: 'u_ghost' }),
+    'window inverted': edit({ from_ms: s.snapshots[0].to_ms + 1 }),
+    'watermark after the clock': edit({ known_at_ms: s.last_timestamp_ms + 1 }),
+    'echo not an instant': edit({ known_at_text: 'tomorrow' }),
+    'echo before the watermark': edit({ known_at_text: '2000-01-01T00:00:00Z' }),
+    'empty token': edit({ token: '' }),
+    'duplicate token': { ...exported, state: { ...s, snapshots: [...s.snapshots, s.snapshots[0]] } },
+    'snapshots missing': { ...exported, state: (({ snapshots, ...rest }) => rest)(s) },
+  };
+  for (const [label, envelope] of Object.entries(bad)) {
+    expectError(await call(srv.base, 'POST', '/_test/import', { json: envelope }), 422, 'validation_failed', label);
+  }
+});
