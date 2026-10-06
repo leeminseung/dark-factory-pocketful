@@ -8,7 +8,7 @@ import { invalid, malformed } from './errors.js';
 import { hashSeededPasswords } from './passwords.js';
 import { parseTimestamp } from './clock.js';
 import { DEFAULT_AUTHORIZATION_TTL_SECONDS, seededClosedAt } from './model.js';
-import { checkRecords, openingBalances, stateFromRecords } from './records.js';
+import { assignRecordSequence, checkRecords, openingBalances, stateFromRecords } from './records.js';
 import { isPlainObject } from './validate.js';
 
 const has = (obj, name) => Object.prototype.hasOwnProperty.call(obj, name);
@@ -139,6 +139,7 @@ export function parseFixture(body) {
     snapshots: [],
   };
   records.users = openingBalances(records.users, records.payments);
+  records.recordSequence = assignRecordSequence(records.payments);
   checkRecords(records);
   return records;
 }

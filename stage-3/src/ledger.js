@@ -10,10 +10,13 @@
 
 const NEVER = Number.POSITIVE_INFINITY;
 
-/** The payment's latest revision recorded at or before `knownAt`, or null. */
-export function selectedRevision(payment, knownAt = NEVER) {
+/**
+ * The payment's latest revision recorded at or before `knownAt`, and (for a statement snapshot)
+ * among the first `upToSeq` recorded, or null.
+ */
+export function selectedRevision(payment, knownAt = NEVER, upToSeq = NEVER) {
   let chosen = null;
-  for (const rev of payment.revisions) if (rev.recordedAt <= knownAt) chosen = rev;
+  for (const rev of payment.revisions) if (rev.recordedAt <= knownAt && rev.seq <= upToSeq) chosen = rev;
   return chosen;
 }
 
@@ -21,12 +24,12 @@ export function selectedRevision(payment, knownAt = NEVER) {
 export const currentRevision = (payment) => payment.revisions.at(-1);
 
 /** The user's money movements under `knownAt`: { payment, rev, time, delta }, in no order. */
-export function movements(book, userId, knownAt = NEVER) {
+export function movements(book, userId, knownAt = NEVER, upToSeq = NEVER) {
   const out = [];
   for (const payment of book.payments) {
     const sign = payment.fromUserId === userId ? -1 : payment.toUserId === userId ? 1 : 0;
     if (sign === 0) continue;
-    const rev = selectedRevision(payment, knownAt);
+    const rev = selectedRevision(payment, knownAt, upToSeq);
     if (rev) out.push({ payment, rev, time: rev.effectiveAt, delta: sign * rev.amount });
   }
   return out;
@@ -90,8 +93,8 @@ export function moneyAt(book, userId, asOf, knownAt = NEVER) {
  * opening balance just before `from`, entries oldest first with the balance after each, and the
  * closing balance just before `to`.
  */
-export function statement(book, userId, { from, to, knownAt = NEVER }) {
-  const all = movements(book, userId, knownAt).sort(byTimeThenId);
+export function statement(book, userId, { from, to, knownAt = NEVER, upToSeq = NEVER }) {
+  const all = movements(book, userId, knownAt, upToSeq).sort(byTimeThenId);
   let opening = book.users.get(userId).openingBalance;
   const entries = [];
   for (const m of all) {

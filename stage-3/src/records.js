@@ -6,7 +6,7 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, expiryOf, isAuthorizationStatus, isLinkedPayment, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, expiryOf, isAuthorizationStatus, isIntegralNumber, isLinkedPayment, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { parseInstant, parseTimestamp } from './clock.js';
@@ -148,6 +148,7 @@ export function checkRecords(r) {
   requireUnique(r.authorizations.map((a) => a.id), 'authorization id');
 
   checkTimes(r);
+  checkRecordSequence(r);
   checkLedger(r);
   checkLinks(r);
   checkHolds(r);
@@ -196,6 +197,31 @@ export function openingBalances(users, payments) {
 }
 
 /**
+ * Every revision has a recording number (stage 3 snapshots): unique, at most the count recorded
+ * so far, and in recording order — a later number never has an earlier recorded time.
+ */
+function checkRecordSequence(r) {
+  check(isIntegralNumber(r.recordSequence) && r.recordSequence >= 0, 'record sequence is invalid');
+  const revs = r.payments.flatMap((p) => p.revisions);
+  check(revs.every((rev) => isIntegralNumber(rev.seq) && rev.seq >= 1 && rev.seq <= r.recordSequence),
+    'a revision has an invalid recording number');
+  requireUnique(revs.map((rev) => rev.seq), 'revision recording number');
+  const ordered = [...revs].sort((a, b) => a.seq - b.seq);
+  check(ordered.every((rev, i) => i === 0 || ordered[i - 1].recordedAt <= rev.recordedAt),
+    'revisions are not numbered in recording order');
+}
+
+/**
+ * Recording numbers for records that do not carry them (a fixture, or a stage-1/2 export):
+ * every revision numbered in recorded-time order. Returns the count, the next state's sequence.
+ */
+export function assignRecordSequence(payments) {
+  const revs = payments.flatMap((p) => (Array.isArray(p.revisions) ? p.revisions : []));
+  revs.sort((a, b) => a.recordedAt - b.recordedAt).forEach((rev, i) => { rev.seq = i + 1; });
+  return revs.length;
+}
+
+/**
  * Every wallet's history is nonnegative (stage 3 "Seeded history is consistent and nonnegative"):
  * under the latest revisions neither total nor available is below zero at any boundary.
  */
@@ -218,9 +244,9 @@ function checkHistory(r) {
 }
 
 /**
- * A statement snapshot (stage 3) is its owner, its window [from, to) and a watermark: what the
- * first read could know, min(known_at, the read's instant), which cannot be later than the clock.
- * Its known_at echo, when there is one, is an instant at or after the watermark.
+ * A statement snapshot (stage 3) is its owner, its window [from, to), the known_at it was asked
+ * for (with its echo), and a watermark: the recording number of the last revision recorded when it
+ * was read, never more than the revisions recorded so far.
  */
 function checkSnapshots(r, isUser) {
   r.snapshots.forEach((sn, i) => {
@@ -228,9 +254,11 @@ function checkSnapshots(r, isUser) {
     check(typeof sn.token === 'string' && sn.token !== '' && isUser(sn.userId), `${at} owner or token is invalid`);
     check((sn.from === null || isTimestampMs(sn.from)) && isTimestampMs(sn.to) && (sn.from === null || sn.from <= sn.to),
       `${at} window is invalid`);
-    check(isTimestampMs(sn.knownAt) && sn.knownAt <= r.lastTimestampMs, `${at} watermark is invalid`);
+    // The watermark is a recording number: what had been recorded when the snapshot was read.
+    check(isIntegralNumber(sn.seq) && sn.seq >= 0 && sn.seq <= r.recordSequence, `${at} watermark is invalid`);
+    check(sn.knownAt === null ? sn.knownAtText === null : isTimestampMs(sn.knownAt), `${at} known_at is invalid`);
     const echo = sn.knownAtText === null ? null : parseInstant(sn.knownAtText);
-    check(sn.knownAtText === null || (echo !== null && echo.ms >= sn.knownAt), `${at} known_at is invalid`);
+    check(sn.knownAtText === null || (echo !== null && echo.ms === sn.knownAt), `${at} known_at echo is invalid`);
   });
   requireUnique(r.snapshots.map((sn) => sn.token), 'snapshot token');
 }
@@ -394,6 +422,7 @@ export function stateFromRecords(r) {
     currency: r.currency, minorUnits: r.minorUnits, authorizationTtlSeconds: r.authorizationTtlSeconds,
   });
   state.lastTimestampMs = r.lastTimestampMs;
+  state.recordSequence = r.recordSequence;
   // Seeded payments without created_at carry the reset time; API payments come after them
   // (stage 3), so nothing new is stamped in the millisecond they share with the clock.
   if (r.payments.some((p) => p.createdAt === r.lastTimestampMs)) state.timestampFloorMs = r.lastTimestampMs + 1;

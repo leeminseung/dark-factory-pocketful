@@ -45,7 +45,9 @@ function entryView(state, entry) {
  * recorded, so every page shows exactly what the first read showed.
  */
 function pageOf(state, snapshot, token, page) {
-  const result = statementOf(state, snapshot.userId, { from: snapshot.from, to: snapshot.to, knownAt: snapshot.knownAt });
+  const result = statementOf(state, snapshot.userId, {
+    from: snapshot.from, to: snapshot.to, knownAt: snapshot.knownAt ?? undefined, upToSeq: snapshot.seq,
+  });
   const { items, hasMore } = paginate(result.entries, page);
   return {
     status: 200,
@@ -84,17 +86,17 @@ export function statement({ state, user, query, now }) {
   const fromMs = from ? from.ms : null;
   const toMs = to ? to.ms : now + 1;
   if (fromMs !== null && fromMs > toMs) throw invalid('from must not be after to');
-  // What this read can know is bounded by the read itself: nothing recorded later can count,
-  // because the service records everything after it at a later instant (State.freezeReadAt).
+  // What this read could know: the revisions recorded so far (by recording number, so nothing
+  // recorded later can count, and the read moves no clock), and at most known_at.
   const snapshot = {
     userId: user.id,
     from: fromMs,
     to: toMs,
-    knownAt: Math.min(knownAt ? knownAt.ms : now, now),
+    knownAt: knownAt ? knownAt.ms : null,
     knownAtText: knownAt ? knownAt.text : null,
+    seq: state.recordSequence,
   };
   const newToken = `snap_${randomBytes(18).toString('base64url')}`;
-  state.freezeReadAt(now);
   state.addSnapshot(newToken, snapshot);
   return pageOf(state, snapshot, newToken, page);
 }

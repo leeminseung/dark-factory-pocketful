@@ -178,3 +178,13 @@ test('R10: stored and query instants share one millisecond rule (both truncated)
   // ada opens at 10005 (seeded 10000 after sending 5); the corrected 6 counts at that millisecond.
   assert.equal((await w.ada.get(`/me${q({ as_of: '2025-01-01T00:00:00.0004Z' })}`)).body.balance, 9_999);
 });
+
+test('R13: reading statements never moves the service clock', async () => {
+  const w = await world(srv.base, history());
+  const clock = async () => (await call(srv.base, 'GET', '/_test/export')).body.state.last_timestamp_ms;
+  const before = await clock();
+  for (let i = 0; i < 300; i += 1) await w.ada.get('/statement?limit=1');
+  assert.equal(await clock(), before, 'reads leave last_timestamp_ms alone');
+  const p = (await w.ada.post('/payments', { to_handle: 'bob', amount: 1 }, newKey())).body;
+  assert.ok(Date.parse(p.created_at) <= Date.now(), `a new payment is not stamped in the future: ${p.created_at}`);
+});

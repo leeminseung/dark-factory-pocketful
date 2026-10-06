@@ -45,6 +45,7 @@ export class State {
     this.lastTimestampMs = 0;
     this.timestampFloorMs = 0; // the earliest the next record may be stamped (see nextTimestamp)
     this.paymentSequence = 0; // payments created so far through the API; orders their ids
+    this.recordSequence = 0; // revisions recorded so far, numbered in recording order (snapshots)
     this.journal = null; // undo steps of the running transaction, newest last
   }
 
@@ -79,6 +80,14 @@ export class State {
     this.remember(() => { this.lastTimestampMs = before; });
     this.lastTimestampMs = Math.max(Date.now(), this.lastTimestampMs, this.timestampFloorMs);
     return this.lastTimestampMs;
+  }
+
+  /** The next recording number: every revision gets one, in the order it is recorded. */
+  nextRecordSeq() {
+    const before = this.recordSequence;
+    this.remember(() => { this.recordSequence = before; });
+    this.recordSequence += 1;
+    return this.recordSequence;
   }
 
   /**
@@ -185,7 +194,7 @@ export class State {
         authorizationId,
         createdAt,
         // Stage 3: revision 1 is the payment as made; corrections append later revisions.
-        revisions: [{ revision: 1, amount: t.amount, effectiveAt: createdAt, recordedAt: createdAt, reason: '' }],
+        revisions: [{ revision: 1, amount: t.amount, effectiveAt: createdAt, recordedAt: createdAt, reason: '', seq: this.nextRecordSeq() }],
       };
       this.addPayment(payment);
       return payment;
@@ -240,7 +249,7 @@ export class State {
     const clockBefore = this.lastTimestampMs;
     this.remember(() => { this.lastTimestampMs = clockBefore; });
     this.lastTimestampMs = recordedAt;
-    const revision = { revision: previous.revision + 1, amount, effectiveAt, recordedAt, reason };
+    const revision = { revision: previous.revision + 1, amount, effectiveAt, recordedAt, reason, seq: this.nextRecordSeq() };
     const revisionsBefore = payment.revisions;
     this.remember(() => { payment.revisions = revisionsBefore; });
     payment.revisions = [...payment.revisions, revision];
@@ -387,17 +396,6 @@ export class State {
   }
 
   // ---- statement snapshots (stage 3) ------------------------------------
-
-  /**
-   * After a read that froze what was known at `readAt`, everything the service records is stamped
-   * strictly later, so a snapshot's watermark never takes in a later revision. (At the clock's
-   * fixed bound, MAX_CLOCK_MS, the clock cannot move on; see notes.)
-   */
-  freezeReadAt(readAt) {
-    const before = this.lastTimestampMs;
-    this.remember(() => { this.lastTimestampMs = before; });
-    this.lastTimestampMs = Math.max(this.lastTimestampMs, Math.min(readAt + 1, MAX_CLOCK_MS));
-  }
 
   addSnapshot(token, snapshot) {
     this.snapshots.set(token, snapshot);

@@ -6,7 +6,7 @@
 import { invalid } from './errors.js';
 import { isPasswordHash } from './passwords.js';
 import { DEFAULT_AUTHORIZATION_TTL_SECONDS, seededClosedAt } from './model.js';
-import { checkRecords, openingBalances, stateFromRecords } from './records.js';
+import { assignRecordSequence, checkRecords, openingBalances, stateFromRecords } from './records.js';
 import { isPlainObject } from './validate.js';
 
 export const TRACK = 'pocketful';
@@ -18,6 +18,7 @@ export function exportState(state) {
     currency: state.currency,
     minor_units: state.minorUnits,
     last_timestamp_ms: state.lastTimestampMs,
+    record_sequence: state.recordSequence,
     authorization_ttl_seconds: state.authorizationTtlSeconds,
     users: [...state.users.values()].map((u) => ({
       id: u.id, email: u.email, password_hash: u.passwordHash, display_name: u.displayName,
@@ -31,7 +32,7 @@ export function exportState(state) {
       settlement_id: p.settlementId, authorization_id: p.authorizationId, created_at_ms: p.createdAt,
       revisions: p.revisions.map((rev) => ({
         revision: rev.revision, amount: rev.amount, effective_at_ms: rev.effectiveAt,
-        recorded_at_ms: rev.recordedAt, reason: rev.reason,
+        recorded_at_ms: rev.recordedAt, reason: rev.reason, seq: rev.seq,
       })),
     })),
     authorizations: state.authorizations.map((a) => ({
@@ -56,6 +57,7 @@ export function exportState(state) {
     // Statement snapshots are state too: their tokens last until reset (stage 3).
     snapshots: [...state.snapshots].map(([token, sn]) => ({
       token, user_id: sn.userId, from_ms: sn.from, to_ms: sn.to, known_at_ms: sn.knownAt, known_at_text: sn.knownAtText,
+      seq: sn.seq,
     })),
   };
   // A JSON round trip detaches every nested object from the live state.
@@ -91,7 +93,7 @@ function isStage1State(state) {
 
 const revisionsOf = (revs) => (Array.isArray(revs) ? revs.map((rev) => (isPlainObject(rev) ? {
   revision: rev.revision, amount: rev.amount, effectiveAt: rev.effective_at_ms,
-  recordedAt: rev.recorded_at_ms, reason: rev.reason,
+  recordedAt: rev.recorded_at_ms, reason: rev.reason, seq: rev.seq,
 } : rev)) : revs);
 
 /**
@@ -171,8 +173,10 @@ export function importState(envelope) {
     })),
     snapshots: fromStage3 ? list(s, 'snapshots').map((sn) => ({
       token: sn.token, userId: sn.user_id, from: sn.from_ms, to: sn.to_ms, knownAt: sn.known_at_ms, knownAtText: sn.known_at_text,
+      seq: sn.seq,
     })) : [],
   };
+  records.recordSequence = fromStage3 ? s.record_sequence : assignRecordSequence(records.payments);
   if (!fromStage3) {
     records.users = openingBalances(records.users, records.payments);
     records.authorizations = records.authorizations.map((a) => ({ ...a, closedAt: closedAtOf(a, records.payments) }));
