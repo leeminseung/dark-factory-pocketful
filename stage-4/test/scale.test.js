@@ -56,3 +56,31 @@ test('R1: a statement snapshot is a few fields, not a copy of the statement', as
   assert.equal(sizes.length, 20);
   assert.ok(Math.max(...sizes) < 400, `largest snapshot record is ${Math.max(...sizes)} bytes`);
 });
+
+test('S4 at size: with 5000 payments among 50 users, 10 concurrent batches of 32 corrections and 20 refunds each answer well inside 5 s', async () => {
+  const fx = { ...busyFixture(5_000), settlement_operator_ids: ['u_u0'] };
+  const w = await world(srv.base, fx);
+  const started = Date.now();
+  const timed = async (send) => {
+    const t0 = Date.now();
+    const res = await send();
+    return { status: res.status, ms: Date.now() - t0 };
+  };
+  const batches = Array.from({ length: 10 }, (_, b) => timed(() => w.u0.post('/correction-batches', {
+    corrections: Array.from({ length: 32 }, (_, i) => {
+      const n = b * 32 + i;
+      return {
+        payment_id: `p_${String(n).padStart(6, '0')}`, expected_revision: 1, amount: 1 + (n % 7) + 1,
+        effective_at: new Date(Date.UTC(2025, 0, 1) + n * 60_000).toISOString(), reason: 'load',
+      };
+    }),
+  }, newKey())));
+  // Payment 4000 + i went from u(i % 50) to u(i % 50 + 1); its receiver refunds one unit.
+  const refunds = Array.from({ length: 20 }, (_, i) => timed(() => w[`u${(i + 1) % 50}`].post(
+    `/payments/p_${String(4_000 + i).padStart(6, '0')}/refunds`, { amount: 1 }, newKey(),
+  )));
+  const out = await Promise.all([...batches, ...refunds]);
+  assert.ok(out.every((r) => r.status === 201), JSON.stringify(out.map((r) => r.status)));
+  const slowest = Math.max(...out.map((r) => r.ms));
+  assert.ok(slowest < REQUEST_LIMIT_MS, `slowest took ${slowest} ms (all: ${Date.now() - started} ms)`);
+});

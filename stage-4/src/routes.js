@@ -5,7 +5,7 @@
 //   noBody:     the endpoint defines no request body: none or an empty one is fine, but a body
 //               that is sent must still parse as a JSON object (§5, ruling R3)
 import { login, signup } from './handlers/auth.js';
-import { createCorrection, listRevisions } from './handlers/corrections.js';
+import { createCorrection, createCorrectionBatch, listRevisions } from './handlers/corrections.js';
 import { me, statement } from './handlers/history.js';
 import {
   captureAuthorization, createAuthorization, listAuthorizations, voidAuthorization,
@@ -68,6 +68,10 @@ export const routes = defineRoutes([
   },
   {
     method: 'POST', path: '/settlements', handler: createSettlement,
+    auth: true, operator: true, idempotent: true,
+  },
+  {
+    method: 'POST', path: '/correction-batches', handler: createCorrectionBatch,
     auth: true, operator: true, idempotent: true,
   },
 ]);

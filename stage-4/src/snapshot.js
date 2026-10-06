@@ -33,7 +33,8 @@ export function exportState(state) {
       created_at_frac: p.createdFrac,
       revisions: p.revisions.map((rev) => ({
         revision: rev.revision, amount: rev.amount, effective_at_ms: rev.effectiveAt, effective_at_frac: rev.effectiveFrac,
-        recorded_at_ms: rev.recordedAt, recorded_at_frac: rev.recordedFrac, reason: rev.reason, seq: rev.seq,
+        recorded_at_ms: rev.recordedAt, recorded_at_frac: rev.recordedFrac, reason: rev.reason,
+        correction_batch_id: rev.correctionBatchId, seq: rev.seq,
       })),
     })),
     authorizations: state.authorizations.map((a) => ({
@@ -83,12 +84,13 @@ function hasStage3Field(state) {
     || some('idempotency', (rec) => typeof rec.scope === 'string' && rec.scope.includes('/corrections"'));
 }
 
-/** True when `state` has any field stage 4 added: refund_of, or a refund receipt. */
+/** True when `state` has any field stage 4 added: refund_of, correction_batch_id, or a receipt of either new route. */
 function hasStage4Field(state) {
   const payments = Array.isArray(state.payments) ? state.payments.filter(isPlainObject) : [];
   const records = Array.isArray(state.idempotency) ? state.idempotency.filter(isPlainObject) : [];
-  return payments.some((p) => has(p, 'refund_of'))
-    || records.some((rec) => typeof rec.scope === 'string' && rec.scope.includes('/refunds"'));
+  return payments.some((p) => has(p, 'refund_of')
+    || (Array.isArray(p.revisions) && p.revisions.some((rev) => isPlainObject(rev) && has(rev, 'correction_batch_id'))))
+    || records.some((rec) => typeof rec.scope === 'string' && (rec.scope.includes('/refunds"') || rec.scope.includes('"/correction-batches"')));
 }
 
 /** True when `state` has none of the fields stage 2 added. */
@@ -106,9 +108,10 @@ function isStage1State(state) {
  */
 const fracOf = (value) => (value === undefined ? '' : value);
 
-const revisionsOf = (revs) => (Array.isArray(revs) ? revs.map((rev) => (isPlainObject(rev) ? {
+const revisionsOf = (revs, fromStage4) => (Array.isArray(revs) ? revs.map((rev) => (isPlainObject(rev) ? {
   revision: rev.revision, amount: rev.amount, effectiveAt: rev.effective_at_ms, effectiveFrac: fracOf(rev.effective_at_frac),
-  recordedAt: rev.recorded_at_ms, recordedFrac: fracOf(rev.recorded_at_frac), reason: rev.reason, seq: rev.seq,
+  recordedAt: rev.recorded_at_ms, recordedFrac: fracOf(rev.recorded_at_frac), reason: rev.reason,
+  correctionBatchId: fromStage4 ? rev.correction_batch_id : null, seq: rev.seq,
 } : rev)) : revs);
 
 /**
@@ -144,8 +147,8 @@ export function importState(envelope) {
   // Likewise a stage-3 export carries every stage-3 field; an export with none is a stage-1 or
   // stage-2 export, whose payments are all still revision 1 and whose opening balances follow
   // from its balances (stage 3 "must accept exports produced by ... stage-1 or stage-2").
-  // A stage-4 export carries refund_of on every payment; one without it (and no refund receipt)
-  // is from stage 1 to 3, which had no refunds.
+  // A stage-4 export carries refund_of on every payment and correction_batch_id on every revision;
+  // one with neither (and no refund or batch receipt) is from stage 1 to 3: no refunds, no batches.
   const fromStage4 = hasStage4Field(s);
   const fromStage3 = fromStage4 || hasStage3Field(s);
   const fromStage1 = !fromStage3 && isStage1State(s);
@@ -167,8 +170,9 @@ export function importState(envelope) {
       refundOf: fromStage4 ? p.refund_of : null,
       createdAt: p.created_at_ms,
       createdFrac: fracOf(p.created_at_frac),
-      revisions: fromStage3 ? revisionsOf(p.revisions) : [{
-        revision: 1, amount: p.amount, effectiveAt: p.created_at_ms, effectiveFrac: '', recordedAt: p.created_at_ms, recordedFrac: '', reason: '',
+      revisions: fromStage3 ? revisionsOf(p.revisions, fromStage4) : [{
+        revision: 1, amount: p.amount, effectiveAt: p.created_at_ms, effectiveFrac: '', recordedAt: p.created_at_ms, recordedFrac: '',
+        reason: '', correctionBatchId: null,
       }],
     })),
     authorizations: fromStage1 ? [] : list(s, 'authorizations').map((a) => ({

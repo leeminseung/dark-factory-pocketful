@@ -43,6 +43,7 @@ export class State {
     this.idempotency = new Map(); // scope -> { fingerprint, response }
     this.snapshots = new Map(); // statement snapshot token -> frozen statement (stage 3; until reset)
     this.refundedBy = new Map(); // payment id -> total refunded of it (stage 4; follows the payments)
+    this.correctionBatchIds = new Set(); // ids of the correction batches recorded (stage 4; follows the revisions)
     this.lastTimestampMs = 0;
     this.timestampFloorMs = 0; // the earliest the next record may be stamped (see nextTimestamp)
     this.paymentSequence = 0; // payments created so far through the API; orders their ids
@@ -199,7 +200,7 @@ export class State {
         // Stage 3: revision 1 is the payment as made; corrections append later revisions.
         revisions: [{
           revision: 1, amount: t.amount, effectiveAt: createdAt, effectiveFrac: '', recordedAt: createdAt, recordedFrac: '',
-          reason: '', seq: this.nextRecordSeq(),
+          reason: '', correctionBatchId: null, seq: this.nextRecordSeq(),
         }],
       };
       this.addPayment(payment);
@@ -238,17 +239,17 @@ export class State {
   // ---- corrections (stage 3) --------------------------------------------
 
   /**
-   * The one gate for corrections (stage 3): appends one revision to each payment, all recorded at
-   * one instant, strictly after every payment's previous revision, and moves each difference
-   * between that payment's two wallets in the same step: an increase debits the sender, a
-   * decrease the receiver. Refused, judged on the combined effect of every revision:
+   * The one gate for corrections (stage 3, 4): appends one revision to each payment, all
+   * recorded at one instant, strictly after every payment's previous revision, and moves each
+   * difference between that payment's two wallets in the same step: an increase debits the
+   * sender, a decrease the receiver. A single correction is a batch of one, with no batch id. Refused, judged on the combined effect of every revision:
    * 1. insufficient_funds when any debited wallet cannot afford it now (from available);
    * 2. otherwise historical_overdraft when, under the latest revisions, any party's total or
    *    available would be negative at some past boundary (one pass per party).
-   * The caller has already checked each item and runs this in a transaction, so a refusal leaves
-   * balances, revisions and everything else as they were.
+   * The caller has already checked each item (ids, immutability, revisions, refunds) and runs
+   * this in a transaction, so a refusal leaves balances, revisions and everything else as they were.
    */
-  correctPayments(items) {
+  correctPayments(items, { batchId = null } = {}) {
     const net = new Map();
     for (const { payment, amount } of items) {
       const delta = amount - currentRevision(payment).amount;
@@ -265,13 +266,17 @@ export class State {
     const revisions = items.map(({ payment, amount, effectiveAt, effectiveFrac, reason }) => {
       const revision = {
         revision: currentRevision(payment).revision + 1, amount, effectiveAt, effectiveFrac, recordedAt, recordedFrac: '',
-        reason, seq: this.nextRecordSeq(),
+        reason, correctionBatchId: batchId, seq: this.nextRecordSeq(),
       };
       const revisionsBefore = payment.revisions;
       this.remember(() => { payment.revisions = revisionsBefore; });
       payment.revisions = [...payment.revisions, revision];
       return revision;
     });
+    if (batchId !== null) {
+      this.correctionBatchIds.add(batchId);
+      this.remember(() => this.correctionBatchIds.delete(batchId));
+    }
     for (const userId of net.keys()) {
       if (firstOverdraft(this, userId) !== null) throw historicalOverdraft();
     }
@@ -423,7 +428,7 @@ export class State {
     });
   }
 
-  /** Adds a payment, keeping the refund totals in step with it. */
+  /** Adds a payment, keeping the refund totals and the correction batch ids in step with it. */
   addPayment(payment) {
     this.payments.push(payment);
     this.paymentsById.set(payment.id, payment);
@@ -436,6 +441,7 @@ export class State {
       this.refundedBy.set(payment.refundOf, (before ?? 0) + payment.amount);
       this.remember(() => (before === undefined ? this.refundedBy.delete(payment.refundOf) : this.refundedBy.set(payment.refundOf, before)));
     }
+    for (const rev of payment.revisions) if (rev.correctionBatchId !== null) this.correctionBatchIds.add(rev.correctionBatchId);
   }
 
   addRequest(request) {

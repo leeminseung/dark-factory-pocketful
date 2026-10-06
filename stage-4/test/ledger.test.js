@@ -57,7 +57,7 @@ test('S3: payments carry revision 1 and authorizations closed_at through export 
     assert.equal(p.revisions.length, 1);
     assert.deepEqual(rev, {
       revision: 1, amount: p.amount, effective_at_ms: p.created_at_ms, effective_at_frac: p.created_at_frac,
-      recorded_at_ms: p.created_at_ms, recorded_at_frac: p.created_at_frac, reason: '',
+      recorded_at_ms: p.created_at_ms, recorded_at_frac: p.created_at_frac, reason: '', correction_batch_id: null,
     });
     assert.ok(Number.isInteger(seq) && seq >= 1 && seq <= s.record_sequence);
   }

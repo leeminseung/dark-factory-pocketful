@@ -68,10 +68,15 @@ export const remainingOf = (authorization) =>
   (authorization.status === 'open' ? authorization.amount - authorization.capturedAmount : 0);
 /** A correction's reason (stage 3): a string of 1 to 200 characters. */
 export const isReason = (value) => typeof value === 'string' && charCount(value) >= 1 && charCount(value) <= MAX_NOTE_CHARS;
-/** Captures and refunds can never be corrected (stage 4). */
+/** Captures and refunds can never be corrected, alone or in a batch (stage 4). */
 export const isImmutablePayment = (payment) => payment.authorizationId !== null || payment.refundOf !== null;
-/** A payment no correction may touch (stage 3, 4): a capture, a refund or a settlement member. */
+/**
+ * A payment a single correction may not touch (stage 3, 4): an immutable one, or a settlement
+ * member, which only an operator's correction batch covering the whole settlement may correct.
+ */
 export const isLinkedPayment = (payment) => isImmutablePayment(payment) || payment.settlementId !== null;
+/** The most payments one correction batch may correct (stage 4). */
+export const MAX_BATCH_CORRECTIONS = 32;
 /**
  * When a fixture's authorization closed (stage 3: seeded closed holds keep no lifecycle), as
  * { closedAt, closedFrac }: an open one has not; an expired one at its expiry or the reset

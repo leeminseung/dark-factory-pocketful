@@ -76,7 +76,8 @@ function readPayment(raw, where, resetAt) {
     createdAt: created.ms,
     createdFrac: created.frac,
     revisions: [{
-      revision: 1, amount, effectiveAt: created.ms, effectiveFrac: created.frac, recordedAt: created.ms, recordedFrac: created.frac, reason: '',
+      revision: 1, amount, effectiveAt: created.ms, effectiveFrac: created.frac, recordedAt: created.ms, recordedFrac: created.frac,
+      reason: '', correctionBatchId: null,
     }],
   };
 }

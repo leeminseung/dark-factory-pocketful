@@ -6,12 +6,12 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, closedKey, createdKey, effectiveKey, expiresKey, recordedKey, expiryOf, isAuthorizationStatus, isImmutablePayment, isIntegralNumber, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, closedKey, createdKey, effectiveKey, expiresKey, recordedKey, expiryOf, isAuthorizationStatus, isImmutablePayment, isIntegralNumber, isReason, MAX_BATCH_CORRECTIONS, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { compareKeys, instantKey, isFrac, parseInstant } from './clock.js';
 import {
-  authorizationView, paymentView, requestView, revisionView, settlementView, splitView,
+  authorizationView, correctionBatchView, paymentView, requestView, revisionView, settlementView, splitView,
 } from './views.js';
 import { currentRevision, firstOverdraft } from './ledger.js';
 import { State } from './state.js';
@@ -28,9 +28,11 @@ import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
  *   authorizationTtlSeconds
  *   payments:     { id, fromUserId, toUserId, amount, note, visibility, requestId, settlementId,
  *                   authorizationId, refundOf, createdAt, createdFrac,
- *                   revisions: [{ revision, amount, effectiveAt, effectiveFrac, recordedAt, recordedFrac, reason, seq }] }
+ *                   revisions: [{ revision, amount, effectiveAt, effectiveFrac, recordedAt, recordedFrac, reason,
+ *                                 correctionBatchId, seq }] }
+ *                 (refundOf: the payment a refund refunds; correctionBatchId: the batch that recorded a
+ *                 revision, null for revision 1 and single corrections; stage 4)
  *                 (amount is the original amount, revision 1; stage 3)
- *                 (refundOf: the payment a refund refunds, else null; stage 4)
  *                 (each …Frac: the time's digits beyond the millisecond, clock.js; stage 3 R14)
  *   requests:     { id, requesterId, payerId, amount, note, status, paymentId, seeded, createdAt }
  *                 (seeded: came from a fixture, which may say `paid` without naming a payment)
@@ -156,6 +158,7 @@ export function checkRecords(r) {
   checkLedger(r);
   checkLinks(r);
   checkRefunds(r);
+  checkCorrectionBatches(r);
   checkHolds(r);
   checkHistory(r);
   checkSnapshots(r, isUser);
@@ -177,14 +180,18 @@ function checkRevisions(p, at) {
     check(isRecordAmount(rev.amount) && isTimestampMs(rev.effectiveAt) && isFrac(rev.effectiveFrac)
       && isTimestampMs(rev.recordedAt) && isFrac(rev.recordedFrac), `${at}.revisions[${i}] fields are invalid`);
     check(i === 0 ? rev.reason === '' : isReason(rev.reason), `${at}.revisions[${i}].reason is invalid`);
+    check(i === 0 ? rev.correctionBatchId === null : isOptionalId(rev.correctionBatchId),
+      `${at}.revisions[${i}].correction_batch_id is invalid`);
     check(i === 0 || (effectiveKey(rev) <= recordedKey(rev) && recordedKey(rev) > recordedKey(revs[i - 1])),
       `${at}.revisions[${i}] times are out of order`);
   });
   const [first] = revs;
   check(first.amount === p.amount && effectiveKey(first) === createdKey(p) && recordedKey(first) === createdKey(p),
     `${at}.revisions[0] is not the payment as made`);
-  check(revs.length === 1 || (!isImmutablePayment(p) && p.settlementId === null),
-    `${at} is a settlement member, capture or refund and cannot have corrections`);
+  // Captures and refunds are never corrected; a settlement member only by a correction batch (stage 4).
+  check(revs.length === 1 || !isImmutablePayment(p), `${at} is a capture or refund and cannot have corrections`);
+  check(p.settlementId === null || revs.every((rev, i) => i === 0 || rev.correctionBatchId !== null),
+    `${at} is a settlement member corrected outside a correction batch`);
 }
 
 /**
@@ -290,6 +297,39 @@ function checkRefunds(r) {
   }
   for (const [id, total] of refunded) {
     check(total <= currentRevision(payments.get(id)).amount, `payment ${id} is refunded beyond its current amount`);
+  }
+}
+
+/** The revisions each correction batch recorded, in recording order: id -> [{ payment, rev }]. */
+function correctionBatches(r) {
+  const batches = new Map();
+  for (const payment of r.payments) {
+    for (const rev of payment.revisions) {
+      if (rev.correctionBatchId !== null) batches.set(rev.correctionBatchId, [...(batches.get(rev.correctionBatchId) ?? []), { payment, rev }]);
+    }
+  }
+  for (const items of batches.values()) items.sort((a, b) => a.rev.seq - b.rev.seq);
+  return batches;
+}
+
+/**
+ * Correction batches (stage 4): each corrects 1..32 distinct payments, never a capture or refund,
+ * with one recorded instant; a batch that corrects a settlement member corrects every member,
+ * all at one effective instant.
+ */
+function checkCorrectionBatches(r) {
+  const settlements = new Map(r.settlements.map((st) => [st.id, st]));
+  for (const [id, items] of correctionBatches(r)) {
+    const paymentIds = new Set(items.map(({ payment }) => payment.id));
+    check(items.length <= MAX_BATCH_CORRECTIONS && paymentIds.size === items.length, `correction batch ${id} is invalid`);
+    check(new Set(items.map(({ rev }) => recordedKey(rev))).size === 1, `correction batch ${id} has more than one recorded_at`);
+    for (const { payment } of items) {
+      if (payment.settlementId === null) continue;
+      const members = settlements.get(payment.settlementId).paymentIds;
+      const effective = new Set(items.filter((item) => item.payment.settlementId === payment.settlementId).map(({ rev }) => effectiveKey(rev)));
+      check(members.every((m) => paymentIds.has(m)) && effective.size === 1,
+        `correction batch ${id} does not correct settlement ${payment.settlementId} whole at one instant`);
+    }
   }
 }
 
@@ -492,11 +532,11 @@ export function stateFromRecords(r) {
  */
 
 /** Fields a receipt from an earlier stage lacks; one that lacks such a field matches when it is null. */
-const LATER_FIELDS = new Set(['authorization_id', 'closed_at', 'refund_of']);
+const LATER_FIELDS = new Set(['authorization_id', 'closed_at', 'refund_of', 'correction_batch_id']);
 
 /**
- * Stage-1 receipts predate authorization_id, stage-2 ones closed_at, stage-3 ones refund_of; a
- * receipt that lacks such a field matches when the record's value is null. Everything else must be equal as a JSON value.
+ * Stage-1 receipts predate authorization_id, stage-2 ones closed_at, stage-3 ones refund_of and
+ * correction_batch_id; a receipt that lacks such a field matches when the record's value is null. Everything else must be equal as a JSON value.
  */
 function sameReceipt(stored, expected) {
   const strip = (exp, got) => {
@@ -550,7 +590,7 @@ const REPLAY_RULES = {
   '/payments/:id/corrections': ({ userId, params, body, receipt, records }) => {
     const p = records.payments.get(params.id);
     const rev = p?.revisions[receipt.revision - 1];
-    return Boolean(rev) && rev.revision > 1 && p.fromUserId === userId
+    return Boolean(rev) && rev.revision > 1 && rev.correctionBatchId === null && p.fromUserId === userId
       && body.expected_revision === rev.revision - 1 && body.amount === rev.amount
       && sameInstant(parseInstant(body.effective_at), rev.effectiveAt, rev.effectiveFrac) && body.reason === rev.reason
       && sameReceipt(receipt, revisionView(p, rev));
@@ -559,6 +599,16 @@ const REPLAY_RULES = {
     const p = records.payments.get(receipt.payment_id);
     return Boolean(p) && p.refundOf === params.id && p.fromUserId === userId && body.amount === p.amount
       && sameReceipt(receipt, view.payment(p));
+  },
+  '/correction-batches': ({ body, receipt, records }) => {
+    const items = records.batches.get(receipt.correction_batch_id);
+    const entries = body.corrections;
+    if (!items || !Array.isArray(entries) || entries.length !== items.length) return false;
+    // A batch records its revisions in the body's order, so recording order is input order.
+    return items.every(({ payment, rev }, i) => isPlainObject(entries[i]) && entries[i].payment_id === payment.id
+      && entries[i].expected_revision === rev.revision - 1 && entries[i].amount === rev.amount && entries[i].reason === rev.reason
+      && sameInstant(parseInstant(entries[i].effective_at), rev.effectiveAt, rev.effectiveFrac))
+      && sameReceipt(receipt, correctionBatchView(receipt.correction_batch_id, items));
   },
   '/authorizations': ({ userId, body, receipt, records, view }) => {
     const a = records.authorizations.get(receipt.authorization_id);
@@ -594,6 +644,7 @@ function checkReplays(r) {
   const records = {
     users: index(r.users), payments: index(r.payments), requests: index(r.requests),
     splits: index(r.splits), settlements: index(r.settlements), authorizations: index(r.authorizations),
+    batches: correctionBatches(r),
   };
   const view = creationViews(r, records);
   r.idempotency.forEach((rec, i) => {

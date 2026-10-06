@@ -43,4 +43,6 @@ export const refundExceedsPayment = () =>
   new ApiError(422, 'refund_exceeds_payment', 'refunds would exceed the payment\'s current amount');
 export const invalidRefundTarget = () =>
   new ApiError(422, 'invalid_refund_target', 'a refund cannot be refunded');
+export const incompleteSettlement = () =>
+  new ApiError(422, 'incomplete_settlement', 'a batch that corrects a settlement member must correct every member');
 export const selfRequest = () => new ApiError(422, 'self_request', 'cannot request from yourself');

@@ -109,6 +109,14 @@ export const revisionView = (payment, rev) => ({
   effective_at: formatTimestamp(rev.effectiveAt, rev.effectiveFrac),
   recorded_at: formatTimestamp(rev.recordedAt, rev.recordedFrac),
   reason: rev.reason,
+  correction_batch_id: rev.correctionBatchId,
+});
+
+/** The 201 body of a correction batch (stage 4): its id, its recording instant, its revisions in input order. */
+export const correctionBatchView = (batchId, items) => ({
+  correction_batch_id: batchId,
+  recorded_at: formatTimestamp(items[0].rev.recordedAt, items[0].rev.recordedFrac),
+  revisions: items.map(({ payment, rev }) => revisionView(payment, rev)),
 });
 
 export const sessionView = (user, token) => ({
