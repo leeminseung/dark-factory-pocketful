@@ -20,6 +20,8 @@
 - List complete at 41 rows (S4-038..S4-041 in 4723697); suite 16f6bb0.
 
 ## Rounds
+- Round 1 started: product 16fff73 (stage folders = 7ca43e7), suite 16f6bb0; acceptance, reviewer round-1 review,
+  product-designer non-blocking regression review.
 
 ## Rulings
 
