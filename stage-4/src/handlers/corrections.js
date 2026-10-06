@@ -1,13 +1,7 @@
 // Payment corrections (stage 3), operator correction batches (stage 4) and revision history.
 import { instantKey, parseInstant } from '../clock.js';
-import {
-  forbidden, incompleteSettlement, invalid, linkedPaymentImmutable, notFound, staleRevision,
-} from '../errors.js';
-import { currentRevision } from '../ledger.js';
-import {
-  MAX_BATCH_CORRECTIONS, MIN_TIMESTAMP_MS, isImmutablePayment, isIntegralNumber, isLinkedPayment,
-  isReason, isRecordAmount,
-} from '../model.js';
+import { forbidden, invalid, notFound } from '../errors.js';
+import { MAX_BATCH_CORRECTIONS, MIN_TIMESTAMP_MS, isIntegralNumber, isReason, isRecordAmount } from '../model.js';
 import { isPlainObject } from '../validate.js';
 import { correctionBatchView, revisionView } from '../views.js';
 
@@ -28,18 +22,6 @@ function correctionTerms(body, now) {
   return { expected, amount, effectiveAt: effective.ms, effectiveFrac: effective.frac, reason };
 }
 
-/**
- * What one correction must satisfy of its payment, after the caller's permission: it is not
- * immutable for this kind of correction (422 linked_payment_immutable), `expected` is its current
- * revision (409 stale_revision), and the new amount still covers what was refunded of it
- * (422 refund_exceeds_payment, stage 4).
- */
-function checkAgainstPayment(state, payment, terms, isImmutable) {
-  if (isImmutable(payment)) throw linkedPaymentImmutable();
-  if (terms.expected !== currentRevision(payment).revision) throw staleRevision();
-  state.requireRefundsWithin(state.refundedOf(payment), terms.amount);
-}
-
 /** Idempotent: only the original sender corrects; returns the 201 body, the new revision. */
 export function createCorrection({ state, user, body, params, now }) {
   const terms = correctionTerms(body, now);
@@ -47,7 +29,7 @@ export function createCorrection({ state, user, body, params, now }) {
   if (!payment) throw notFound('no such payment');
   if (payment.fromUserId !== user.id) throw forbidden('only the payment\'s sender may correct it');
   // Settlement members, captures and refunds are out of reach of a single correction.
-  checkAgainstPayment(state, payment, terms, isLinkedPayment);
+  state.checkCorrection(payment, terms, { inBatch: false });
   const [revision] = state.correctPayments([{ payment, ...terms }]);
   return revisionView(payment, revision);
 }
@@ -70,38 +52,17 @@ function batchItem(state, entry, now) {
   const terms = correctionTerms(entry, now);
   const payment = state.paymentsById.get(entry.payment_id);
   if (!payment) throw notFound(`no such payment ${entry.payment_id}`);
-  checkAgainstPayment(state, payment, terms, isImmutablePayment);
+  state.checkCorrection(payment, terms, { inBatch: true });
   return { payment, ...terms };
 }
 
 /**
- * A batch that corrects any member of a settlement corrects every member (422
- * incomplete_settlement), all at one effective instant, however its offset is spelt (422
- * validation_failed). Every settlement is checked for completeness before any for its instant.
- */
-function checkSettlements(state, items) {
-  const bySettlement = new Map();
-  for (const item of items) {
-    const id = item.payment.settlementId;
-    if (id !== null) bySettlement.set(id, [...(bySettlement.get(id) ?? []), item]);
-  }
-  for (const [id, members] of bySettlement) {
-    if (members.length !== state.settlements.get(id).paymentIds.length) throw incompleteSettlement();
-  }
-  for (const members of bySettlement.values()) {
-    const instants = new Set(members.map((item) => instantKey(item.effectiveAt, item.effectiveFrac)));
-    if (instants.size > 1) throw invalid('the members of one settlement must share one effective_at');
-  }
-}
-
-/**
  * POST /correction-batches (stage 4), idempotent; the caller is already known to be an operator.
- * Errors in the stated order: the batch's shape, then each item in input order, then settlement
- * completeness, then (in State.correctPayments) current available funds, then history.
+ * Errors in the stated order: the batch's shape, then each item in input order, then (in
+ * State.correctPayments) settlement completeness, current available funds, then history.
  */
 export function createCorrectionBatch({ state, body, now }) {
   const items = batchEntries(body).map((entry) => batchItem(state, entry, now));
-  checkSettlements(state, items);
   const batchId = state.newId('cb', (id) => state.correctionBatchIds.has(id));
   const revisions = state.correctPayments(items, { batchId });
   return correctionBatchView(batchId, items.map(({ payment }, i) => ({ payment, rev: revisions[i] })));

@@ -13,12 +13,14 @@
 // open (holding) authorizations exact; `expireDue` closes those whose time has come.
 import { randomBytes } from 'node:crypto';
 import {
-  authorizationExpired, authorizationNotOpen, captureExceedsAuthorization, historicalOverdraft,
-  insufficientFunds, refundExceedsPayment, requestNotPending,
+  authorizationExpired, authorizationNotOpen, captureExceedsAuthorization, historicalOverdraft, incompleteSettlement,
+  insufficientFunds, invalid, linkedPaymentImmutable, refundExceedsPayment, requestNotPending, staleRevision,
 } from './errors.js';
+import { instantKey } from './clock.js';
 import { currentRevision, firstOverdraft } from './ledger.js';
 import {
-  DEFAULT_AUTHORIZATION_TTL_SECONDS, MAX_CLOCK_MS, TERMINAL_STATUSES, expiryOf, isDue, isWithinRefundCap, remainingOf,
+  DEFAULT_AUTHORIZATION_TTL_SECONDS, MAX_CLOCK_MS, TERMINAL_STATUSES, expiryOf, isDue, isImmutablePayment, isLinkedPayment,
+  isWithinRefundCap, remainingOf,
 } from './model.js';
 
 export class State {
@@ -243,13 +245,18 @@ export class State {
    * recorded at one instant, strictly after every payment's previous revision, and moves each
    * difference between that payment's two wallets in the same step: an increase debits the
    * sender, a decrease the receiver. A single correction is a batch of one, with no batch id. Refused, judged on the combined effect of every revision:
-   * 1. insufficient_funds when any debited wallet cannot afford it now (from available);
-   * 2. otherwise historical_overdraft when, under the latest revisions, any party's total or
+   * 1. each item's own rules (checkCorrection), in input order;
+   * 2. for a batch, every touched settlement whole at one instant (checkSettlementsWhole);
+   * 3. insufficient_funds when any debited wallet cannot afford it now (from available);
+   * 4. otherwise historical_overdraft when, under the latest revisions, any party's total or
    *    available would be negative at some past boundary (one pass per party).
-   * The caller has already checked each item (ids, immutability, revisions, refunds) and runs
-   * this in a transaction, so a refusal leaves balances, revisions and everything else as they were.
+   * Handlers call checkCorrection themselves while reading items, so that item errors keep input
+   * order among their own field checks; the gate checks again so that no caller can skip them.
+   * The caller runs this in a transaction, so a refusal leaves everything as it was.
    */
   correctPayments(items, { batchId = null } = {}) {
+    for (const item of items) this.checkCorrection(item.payment, item, { inBatch: batchId !== null });
+    if (batchId !== null) this.checkSettlementsWhole(items);
     const net = new Map();
     for (const { payment, amount } of items) {
       const delta = amount - currentRevision(payment).amount;
@@ -278,6 +285,38 @@ export class State {
       if (firstOverdraft(this, userId) !== null) throw historicalOverdraft();
     }
     return revisions;
+  }
+
+  /**
+   * One correction's own rules, given its payment: not a payment this kind of correction may not
+   * touch (422 linked_payment_immutable: captures and refunds always, settlement members outside a
+   * batch), `expected` its current revision (409 stale_revision), and the new amount still at or
+   * above what was refunded of it (422 refund_exceeds_payment).
+   */
+  checkCorrection(payment, { expected, amount }, { inBatch }) {
+    if (inBatch ? isImmutablePayment(payment) : isLinkedPayment(payment)) throw linkedPaymentImmutable();
+    if (expected !== currentRevision(payment).revision) throw staleRevision();
+    this.requireRefundsWithin(this.refundedOf(payment), amount);
+  }
+
+  /**
+   * A batch that corrects any member of a settlement corrects every member (422
+   * incomplete_settlement), all at one effective instant, however its offset is spelt (422
+   * validation_failed). Every settlement is checked for completeness before any for its instant.
+   */
+  checkSettlementsWhole(items) {
+    const bySettlement = new Map();
+    for (const item of items) {
+      const id = item.payment.settlementId;
+      if (id !== null) bySettlement.set(id, [...(bySettlement.get(id) ?? []), item]);
+    }
+    for (const [id, members] of bySettlement) {
+      if (members.length !== this.settlements.get(id).paymentIds.length) throw incompleteSettlement();
+    }
+    for (const members of bySettlement.values()) {
+      const instants = new Set(members.map((item) => instantKey(item.effectiveAt, item.effectiveFrac)));
+      if (instants.size > 1) throw invalid('the members of one settlement must share one effective_at');
+    }
   }
 
   // ---- refunds (stage 4) -------------------------------------------------
