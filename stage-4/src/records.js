@@ -287,7 +287,7 @@ function checkSnapshots(r, isUser) {
  */
 function checkRefunds(r) {
   const payments = new Map(r.payments.map((p) => [p.id, p]));
-  const refunded = new Map();
+  const refundedIds = new Set(); // the payments that have refunds
   for (const p of r.payments) {
     if (p.refundOf === null) continue;
     const target = payments.get(p.refundOf);
@@ -295,20 +295,22 @@ function checkRefunds(r) {
       && p.note === target.note && p.visibility === target.visibility
       && p.requestId === null && p.settlementId === null && p.authorizationId === null
       && createdKey(p) >= createdKey(target), `payment ${p.id} is not a refund of ${p.refundOf}`);
-    refunded.set(target.id, 0);
+    refundedIds.add(target.id);
   }
   // Every recording step that touches the cap, in recording order (checkRecordSequence: seq is unique).
   const steps = [];
   for (const p of r.payments) {
     if (p.refundOf !== null) steps.push({ seq: p.revisions[0].seq, targetId: p.refundOf, refund: p.amount });
-    else if (refunded.has(p.id)) for (const rev of p.revisions) steps.push({ seq: rev.seq, targetId: p.id, amount: rev.amount });
+    else if (refundedIds.has(p.id)) for (const rev of p.revisions) steps.push({ seq: rev.seq, targetId: p.id, amount: rev.amount });
   }
   steps.sort((a, b) => a.seq - b.seq);
-  const amount = new Map();
+  const amountSoFar = new Map(); // payment id -> its amount at its latest revision so far
+  const refundedSoFar = new Map(); // payment id -> its refunds so far
   for (const step of steps) {
-    if (step.refund === undefined) amount.set(step.targetId, step.amount);
-    else refunded.set(step.targetId, refunded.get(step.targetId) + step.refund);
-    check(amount.has(step.targetId) && isWithinRefundCap(refunded.get(step.targetId), amount.get(step.targetId)),
+    if (step.refund === undefined) amountSoFar.set(step.targetId, step.amount);
+    else refundedSoFar.set(step.targetId, (refundedSoFar.get(step.targetId) ?? 0) + step.refund);
+    check(amountSoFar.has(step.targetId)
+      && isWithinRefundCap(refundedSoFar.get(step.targetId) ?? 0, amountSoFar.get(step.targetId)),
       `payment ${step.targetId} is refunded beyond its amount at recording number ${step.seq}`);
   }
 }
