@@ -204,8 +204,13 @@ function checkHistory(r) {
     paymentsById: new Map(r.payments.map((p) => [p.id, p])),
     authorizations: r.authorizations,
   };
+  const paymentsOf = new Map(r.users.map((u) => [u.id, []]));
+  for (const p of r.payments) {
+    paymentsOf.get(p.fromUserId).push(p);
+    paymentsOf.get(p.toUserId).push(p);
+  }
   for (const u of r.users) {
-    const overdraft = firstOverdraft(book, u.id);
+    const overdraft = firstOverdraft(book, u.id, paymentsOf.get(u.id));
     check(overdraft === null, `${u.id} history has a negative ${overdraft?.what} balance`);
   }
 }

@@ -97,25 +97,46 @@ export function statement(book, userId, { from, to, knownAt = NEVER }) {
   return { opening, entries: withBalances, closing: running };
 }
 
+/** One authorization's effect on the payer's held total, as (time, change) events, all known. */
+function holdEvents(book, a) {
+  if (a.closedAt !== null && a.closedAt <= a.createdAt && a.paymentIds.length === 0) return [];
+  const events = [{ time: a.createdAt, held: a.amount }];
+  const close = Math.min(a.closedAt ?? NEVER, a.expiresAt);
+  let captured = 0;
+  for (const id of a.paymentIds) {
+    const capture = book.paymentsById.get(id);
+    if (capture.createdAt > close) continue;
+    captured += capture.revisions[0].amount;
+    events.push({ time: capture.createdAt, held: -capture.revisions[0].amount });
+  }
+  if (close !== NEVER) events.push({ time: close, held: -Math.max(0, a.amount - captured) });
+  return events;
+}
+
 /**
  * The first instant at which the user's history, under the latest revisions, has a negative
  * total or available, or null if none does. Every effective time of a movement and every hold
- * event is a boundary, and each boundary counts every movement at that instant together.
+ * event is a boundary, and each boundary counts every change at that instant together. One sorted
+ * pass with running sums (stage 3 R2): `payments` may be the user's payments only, when known.
  */
-export function firstOverdraft(book, userId) {
-  const times = new Set(movements(book, userId).map((m) => m.time));
+export function firstOverdraft(book, userId, payments = book.payments) {
+  const opening = book.users.get(userId).openingBalance;
+  if (opening < 0) return { at: null, what: 'total' };
+  const events = movements({ ...book, payments }, userId).map((m) => ({ time: m.time, total: m.delta, held: 0 }));
   for (const a of book.authorizations) {
-    if (a.fromUserId !== userId) continue;
-    times.add(a.createdAt);
-    times.add(a.expiresAt);
-    if (a.closedAt !== null) times.add(a.closedAt);
-    for (const id of a.paymentIds) times.add(book.paymentsById.get(id).createdAt);
+    if (a.fromUserId === userId) for (const e of holdEvents(book, a)) events.push({ time: e.time, total: 0, held: e.held });
   }
-  if (book.users.get(userId).openingBalance < 0) return { at: null, what: 'total' };
-  for (const t of [...times].sort((x, y) => x - y)) {
-    const total = balanceAt(book, userId, t);
-    if (total < 0) return { at: t, what: 'total' };
-    if (total - heldAt(book, userId, t) < 0) return { at: t, what: 'available' };
+  events.sort((x, y) => x.time - y.time);
+  let total = opening;
+  let held = 0;
+  for (let i = 0; i < events.length;) {
+    const at = events[i].time;
+    for (; i < events.length && events[i].time === at; i += 1) {
+      total += events[i].total;
+      held += events[i].held;
+    }
+    if (total < 0) return { at, what: 'total' };
+    if (total - held < 0) return { at, what: 'available' };
   }
   return null;
 }
