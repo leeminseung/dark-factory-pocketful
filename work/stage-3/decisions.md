@@ -16,6 +16,8 @@
 - List check (52fafae, 67 rows): asked for 5 more — correction insufficient_funds against available; correction field
   wrong types (decision); seeded payment/authorization created_at format and future (reset and import); revisions on
   unknown payment 404; extreme query instants never 5xx / non-RFC 3339.
+- Suite ready c9e81b1 (994 tests: 554 + 304 + 136); command `work/acceptance/run.sh stage-3 3`; sent to implementer.
+  List-check rows not yet added; re-requested as S3-070..S3-074.
 
 ## Rounds
 
