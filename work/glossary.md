@@ -72,3 +72,7 @@ Terms the requirements define or rely on, in the requirements' own words. "§" r
 | snapshot token | An opaque token from a first statement read that "freezes the caller's selected revisions, window, balances, entries and default `to`"; pages with `?snapshot=`; lasts until reset. | stage 3 Stable statement pagination |
 | linked payment | A settlement member or a capture; it cannot be corrected (422 `linked_payment_immutable`). | stage 3 Settlement history |
 | `closed_at` | An authorisation's closing event time: "null while open; event time when closed". | stage 3 Historical holds |
+| refund | `POST /payments/{id}/refunds` by the original receiver: "a new payment in the opposite direction, with `refund_of` naming the target"; cumulative refunds ≤ the current corrected amount. | stage 4 Refunds |
+| `refund_of` | The payment a refund returns; "Other payments have `refund_of: null`." | stage 4 Refunds |
+| correction batch | `POST /correction-batches` by a settlement operator: 1..32 corrections committed together, sharing one `recorded_at` and a `correction_batch_id`; the only way to correct settlement members. | stage 4 Batch corrections |
+| settlement completeness | "Correcting any settlement member requires including every member of that settlement" (422 `incomplete_settlement`). | stage 4 Batch corrections |
