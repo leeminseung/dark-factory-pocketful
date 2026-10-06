@@ -31,6 +31,10 @@
   F1 fails S3-043/S3-009 — sub-millisecond effective_at truncated, so a correction effective at .3435 counts at as_of
   .3434 (blocking: "`as_of` retains its inclusive meaning"). Count 1 vs previous 0 -> did not fall -> loop stopped;
   final review on e03c437.
+- Final review of e03c437: CHANGES NEEDED, blocking 7 (R13-R16 + S3-043, S3-009 + supplied stage-3 check intermittently
+  failing test_a_statement_walks_the_balance_forward = R16); work/reviews/review-e03c437-final.md (fix-commit + probe
+  briefs/raw listed). R1-R3, R6-R9 fixed; R10 regressed as R14; R5 open non-blocking. Sent R13-R24 to implementer;
+  rounds continue from 3 without reviewer, compared with 7.
 
 ## Rulings
 - Seeded payment `created_at: "not-a-time"` (stage-1 test test_fixture_fields_outside_the_format_are_ignored fails on
