@@ -6,7 +6,7 @@
 // anything is built, so a rejected fixture changes nothing.
 import { invalid, malformed } from './errors.js';
 import { hashSeededPasswords } from './passwords.js';
-import { parseInstant } from './clock.js';
+import { instantKey, parseInstant } from './clock.js';
 import { DEFAULT_AUTHORIZATION_TTL_SECONDS, seededClosedAt } from './model.js';
 import { assignRecordSequence, checkRecords, openingBalances, stateFromRecords } from './records.js';
 import { isPlainObject } from './validate.js';
@@ -99,6 +99,11 @@ function readAuthorization(raw, where, resetAt) {
   // keep no lifecycle and count as closed at their creation (or at expiry, if that came first).
   const created = readTime(object(raw, where), 'created_at', where, { ms: resetAt, frac: '' });
   const expires = readTime(raw, 'expires_at', where);
+  // One given its own created_at must not be created after it expires (stage 3 "Seeded history is
+  // consistent"). Without one it counts from the reset, which may well be after its expires_at.
+  if (has(raw, 'created_at') && instantKey(created.ms, created.frac) > instantKey(expires.ms, expires.frac)) {
+    throw invalid(`${where}.created_at is after its expires_at`);
+  }
   const amount = read(raw, 'amount', 'any', where);
   const status = read(raw, 'status', 'any', where); // required: the fixture format gives no default
   const times = { expiresAt: expires.ms, expiresFrac: expires.frac, createdAt: created.ms, createdFrac: created.frac };

@@ -71,3 +71,16 @@ test('S3 holds: a stage-2 export with authorization receipts imports and replays
   const replay = await w.ada.post('/authorizations', { to_handle: 'bob', amount: 10 }, key);
   assert.deepEqual([replay.status, replay.body.authorization_id], [200, a.authorization_id]);
 });
+
+test('R23 S3 "Seeded history is consistent": a seeded authorization created after its expires_at is 422', async () => {
+  const seed = (over) => ({
+    id: 'a_odd', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 100, note: '', status: 'open',
+    created_at: '2025-06-01T00:00:00.0002Z', expires_at: '2025-06-01T00:00:00.0001Z', ...over,
+  });
+  for (const status of ['open', 'expired', 'voided']) {
+    const res = await call(srv.base, 'POST', '/_test/reset', { json: fixture({ authorizations: [seed({ status })] }) });
+    assert.deepEqual([res.status, res.body?.error?.code], [422, 'validation_failed'], status);
+  }
+  const ok = await call(srv.base, 'POST', '/_test/reset', { json: fixture({ authorizations: [seed({ expires_at: '2025-06-01T00:00:00.0002Z' })] }) });
+  assert.equal(ok.status, 204, 'one that expires as it is created is consistent');
+});
