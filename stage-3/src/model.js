@@ -3,6 +3,7 @@
 // (validate.js), reset fixtures (fixture.js) and imported state (snapshot.js) — asks here.
 
 import { EMAIL_PATTERN, MAX_AMOUNT, MAX_NOTE_CHARS, charCount } from '../public/assets/shared/rules.js';
+import { NEVER_KEY, instantKey } from './clock.js';
 
 export { EMAIL_PATTERN, MAX_AMOUNT, MAX_NOTE_CHARS, charCount };
 export const MAX_ID_CHARS = 64;
@@ -61,7 +62,7 @@ export const isTtlSeconds = (value) => isIntegerIn(value, 1, MAX_TTL_SECONDS);
 /** A creation time the service's clock may hold: at most MAX_CLOCK_MS. */
 export const isClockMs = (value) => isIntegerIn(value, 0, MAX_CLOCK_MS);
 /** An authorization whose expires_at is at or before `now` has expired (stage 2). */
-export const isDue = (authorization, now) => authorization.expiresAt <= now;
+export const isDue = (authorization, now) => expiresKey(authorization) <= instantKey(now);
 /** What an authorization still holds: amount − captured while open, zero once closed. */
 export const remainingOf = (authorization) =>
   (authorization.status === 'open' ? authorization.amount - authorization.capturedAmount : 0);
@@ -70,12 +71,26 @@ export const isReason = (value) => typeof value === 'string' && charCount(value)
 /** Settlement members and captures are linked payments: they cannot be corrected (stage 3). */
 export const isLinkedPayment = (payment) => payment.settlementId !== null || payment.authorizationId !== null;
 /**
- * When a fixture's authorization closed (stage 3: seeded closed holds keep no lifecycle): an
- * open one has not; an expired one at its expiry or the reset, whichever came first; any other
- * at the reset (its creation).
+ * When a fixture's authorization closed (stage 3: seeded closed holds keep no lifecycle), as
+ * { closedAt, closedFrac }: an open one has not; an expired one at its expiry or the reset
+ * (its creation), whichever came first; any other at its creation.
  */
-export const seededClosedAt = ({ status, expiresAt, createdAt }) =>
-  (status === 'open' ? null : status === 'expired' ? Math.min(expiresAt, createdAt) : createdAt);
+export function seededClosedAt(a) {
+  if (a.status === 'open') return { closedAt: null, closedFrac: '' };
+  const atExpiry = a.status === 'expired' && expiresKey(a) < createdKey(a);
+  return atExpiry ? { closedAt: a.expiresAt, closedFrac: a.expiresFrac } : { closedAt: a.createdAt, closedFrac: a.createdFrac };
+}
+
+/**
+ * Each stored time as an ordering key (clock.js instantKey), its fraction beyond the millisecond
+ * included (R14): payments' and authorizations' created_at, revisions' effective and recorded
+ * times, authorizations' expires_at and closed_at (after every instant while open).
+ */
+export const createdKey = (record) => instantKey(record.createdAt, record.createdFrac);
+export const effectiveKey = (rev) => instantKey(rev.effectiveAt, rev.effectiveFrac);
+export const recordedKey = (rev) => instantKey(rev.recordedAt, rev.recordedFrac);
+export const expiresKey = (a) => instantKey(a.expiresAt, a.expiresFrac);
+export const closedKey = (a) => (a.closedAt === null ? NEVER_KEY : instantKey(a.closedAt, a.closedFrac));
 export const isMinorUnits = (value) => MINOR_UNITS.includes(value);
 export const isTotalWithinLimit = (balances) =>
   balances.reduce((sum, balance) => sum + balance, 0) <= BALANCE_LIMIT;

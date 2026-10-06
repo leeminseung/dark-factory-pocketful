@@ -154,6 +154,56 @@ test('R3 S3 "Tokens last until reset": snapshots survive export and import, stil
   }
 });
 
+test('R14: holds, known_at and snapshots keep sub-millisecond instants, through export and import too', async () => {
+  const w = await world(srv.base, fixture({
+    payments: [
+      { id: 'p_ms', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 5, note: '', created_at: '2025-01-01T00:00:00.0005Z' },
+    ],
+    authorizations: [{
+      id: 'a_ms', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 300, status: 'open',
+      created_at: '2025-01-01T00:00:00.0002Z', expires_at: '2099-01-01T00:00:00.12345Z',
+    }],
+  }));
+  const money = async (params) => {
+    const b = (await w.ada.get(`/me${q(params)}`)).body;
+    return [b.total, b.held];
+  };
+  assert.deepEqual(await money({ as_of: '2025-01-01T00:00:00.0001Z' }), [10_005, 0]);
+  assert.deepEqual(await money({ as_of: '2025-01-01T00:00:00.0002Z' }), [10_005, 300], 'the hold starts at .0002');
+  assert.deepEqual(await money({ as_of: '2099-01-01T00:00:00.12344Z' }), [10_000, 300]);
+  assert.deepEqual(await money({ as_of: '2099-01-01T00:00:00.12345Z' }), [10_000, 0], 'and ends at expires_at, to the digit');
+  assert.deepEqual(await money({ as_of: '2026-01-01T00:00:00Z', known_at: '2025-01-01T00:00:00.0004Z' }), [10_005, 300],
+    'a payment seeded at .0005 is not known at .0004');
+  const window = { from: '2025-01-01T00:00:00.0005Z', to: '2025-01-01T00:00:00.00051Z' };
+  const first = (await w.ada.get(`/statement${q(window)}`)).body;
+  assert.deepEqual(first.entries.map((e) => [e.payment.payment_id, e.effective_at]), [['p_ms', '2025-01-01T00:00:00.0005+00:00']]);
+  const auth = (await w.ada.get('/authorizations')).body.authorizations[0];
+  assert.deepEqual([auth.created_at, auth.expires_at], ['2025-01-01T00:00:00.0002+00:00', '2099-01-01T00:00:00.12345+00:00']);
+
+  const key = newKey();
+  const fix = { expected_revision: 1, amount: 4, effective_at: '2025-01-01T00:00:00.000500000Z', reason: 'r' };
+  const corrected = (await w.ada.post('/payments/p_ms/corrections', fix, key)).body;
+  assert.equal(corrected.effective_at, '2025-01-01T00:00:00.0005+00:00');
+
+  const exported = (await call(srv.base, 'GET', '/_test/export')).body;
+  await call(srv.base, 'POST', '/_test/reset', { json: fixture() });
+  assert.equal((await call(srv.base, 'POST', '/_test/import', { json: exported })).status, 204);
+  assert.deepEqual((await w.ada.post('/payments/p_ms/corrections', fix, key)).body, corrected, 'the replay matches after import');
+  assert.deepEqual((await w.ada.get('/authorizations')).body.authorizations[0], auth);
+  assert.equal((await w.ada.get('/activity')).body.payments[0].created_at, '2025-01-01T00:00:00.0005+00:00');
+  assert.deepEqual((await w.ada.get(`/statement${q({ snapshot: first.snapshot })}`)).body, first);
+  assert.deepEqual(await money({ as_of: '2099-01-01T00:00:00.12344Z' }), [10_001, 300]);
+
+  const s = exported.state;
+  const withPayment = (over) => ({ ...exported, state: { ...s, payments: s.payments.map((p) => ({ ...p, ...over })) } });
+  for (const frac of ['50', 5, 'x', null]) {
+    expectError(await call(srv.base, 'POST', '/_test/import', { json: withPayment({ created_at_frac: frac }) }), 422, 'validation_failed',
+      `created_at_frac ${JSON.stringify(frac)}`);
+  }
+  expectError(await call(srv.base, 'POST', '/_test/import', { json: withPayment({ created_at_frac: '4' }) }), 422, 'validation_failed',
+    'revision 1 must keep the payment\'s own instant');
+});
+
 test('R6: lowercase t and z are RFC 3339 too, for every instant the service reads', async () => {
   const w = await world(srv.base, fixture({ payments: [
     { id: 'p_lc', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 5, note: '', created_at: '2025-01-01t00:00:00z' },
@@ -165,18 +215,45 @@ test('R6: lowercase t and z are RFC 3339 too, for every instant the service read
   assert.equal(corrected.status, 201, JSON.stringify(corrected.body));
 });
 
-test('R10: stored and query instants share one millisecond rule (both truncated)', async () => {
-  const w = await world(srv.base, fixture({ payments: [
-    { id: 'p_ms', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 5, note: '', created_at: '2025-01-01T00:00:00.000Z' },
-  ] }));
-  const corrected = await w.ada.post('/payments/p_ms/corrections', { expected_revision: 1, amount: 6, effective_at: '2025-01-01T00:00:00.0005Z', reason: 'r' }, newKey());
-  assert.equal(corrected.body.effective_at, '2025-01-01T00:00:00.000+00:00');
-  const window = (from, to) => w.ada.get(`/statement${q({ from, to })}`);
-  // The same instant written with sub-millisecond digits names the same millisecond everywhere.
-  assert.deepEqual((await window('2025-01-01T00:00:00.0005Z', '2025-01-01T00:00:00.0009Z')).body.entries.map((e) => e.payment.payment_id), []);
-  assert.deepEqual((await window('2025-01-01T00:00:00.0005Z', '2025-01-01T00:00:00.001Z')).body.entries.map((e) => e.payment.payment_id), ['p_ms']);
-  // ada opens at 10005 (seeded 10000 after sending 5); the corrected 6 counts at that millisecond.
-  assert.equal((await w.ada.get(`/me${q({ as_of: '2025-01-01T00:00:00.0004Z' })}`)).body.balance, 9_999);
+test('R14 S3-043 S3-009: instants compare at the precision they were given', async () => {
+  const w = await world(srv.base, fixture({
+    users: [user('ada', 10_000), user('bob', 2_500), user('cy', 500)],
+    payments: [
+      { id: 'p_ms', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 5, note: '', created_at: '2025-01-01T00:00:00.0005Z' },
+    ],
+  }));
+  const bal = async (as_of) => (await w.ada.get(`/me${q({ as_of })}`)).body.balance;
+  assert.equal(await bal('2025-01-01T00:00:00.0003Z'), 10_005, 'not yet at .0003');
+  assert.equal(await bal('2025-01-01T00:00:00.0005Z'), 10_000, 'at exactly .0005 it has happened');
+  assert.equal(await bal('2025-01-01T00:00:00.00050000Z'), 10_000);
+  const feed = (await w.ada.get('/activity')).body.payments;
+  assert.equal(feed[0].created_at, '2025-01-01T00:00:00.0005+00:00', 'given back at its own precision');
+  const ids = async (from, to) => (await w.ada.get(`/statement${q({ from, to })}`)).body.entries.map((e) => e.payment.payment_id);
+  assert.deepEqual(await ids('2025-01-01T00:00:00.0004Z', '2025-01-01T00:00:00.0005Z'), [], 'to is exclusive at full precision');
+  assert.deepEqual(await ids('2025-01-01T00:00:00.0005Z', '2025-01-01T00:00:00.0006Z'), ['p_ms']);
+  assert.deepEqual(await ids('2025-01-01T00:00:00.00051Z', '2025-01-02T00:00:00Z'), [], 'from is inclusive at full precision');
+  const corrected = await w.ada.post('/payments/p_ms/corrections', { expected_revision: 1, amount: 6, effective_at: '2025-01-01T00:00:00.3435Z', reason: 'r' }, newKey());
+  assert.equal(corrected.status, 201, JSON.stringify(corrected.body));
+  assert.equal(corrected.body.effective_at, '2025-01-01T00:00:00.3435+00:00');
+  assert.equal(await bal('2025-01-01T00:00:00.3434Z'), 10_005, 'the correction counts from .3435, not .3434');
+  assert.equal(await bal('2025-01-01T00:00:00.3435Z'), 9_999);
+});
+
+test('R14: a sub-millisecond effective time cannot hide a historical overdraft', async () => {
+  // bob opens at 0, receives 100 at .0005 and sends it on at .0006; cy pays him 500 later, so he can
+  // afford any correction now. Moving his income to .0007 would mean he sent 100 at .0006 he did not have.
+  const w = await world(srv.base, fixture({
+    users: [user('ada', 10_000), user('bob', 500), user('cy', 1_000)],
+    payments: [
+      { id: 'p_in', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 100, note: '', created_at: '2025-01-01T00:00:00.0005Z' },
+      { id: 'p_out', from_user_id: 'u_bob', to_user_id: 'u_cy', amount: 100, note: '', created_at: '2025-01-01T00:00:00.0006Z' },
+      { id: 'p_now', from_user_id: 'u_cy', to_user_id: 'u_bob', amount: 500, note: '', created_at: '2025-06-01T00:00:00Z' },
+    ],
+  }));
+  const bad = await w.ada.post('/payments/p_in/corrections', { expected_revision: 1, amount: 100, effective_at: '2025-01-01T00:00:00.0007Z', reason: 'later' }, newKey());
+  assert.deepEqual([bad.status, bad.body.error?.code], [409, 'historical_overdraft'], JSON.stringify(bad.body));
+  const fine = await w.ada.post('/payments/p_in/corrections', { expected_revision: 1, amount: 100, effective_at: '2025-01-01T00:00:00.00055Z', reason: 'still before' }, newKey());
+  assert.equal(fine.status, 201, JSON.stringify(fine.body));
 });
 
 test('R13: reading statements never moves the service clock', async () => {

@@ -18,7 +18,7 @@ export function paymentView(state, payment) {
     request_id: payment.requestId,
     settlement_id: payment.settlementId,
     authorization_id: payment.authorizationId,
-    created_at: formatTimestamp(payment.createdAt),
+    created_at: formatTimestamp(payment.createdAt, payment.createdFrac),
   };
 }
 
@@ -92,11 +92,11 @@ export function authorizationView(state, authorization) {
     note: authorization.note,
     visibility: authorization.visibility,
     status: authorization.status,
-    expires_at: formatTimestamp(authorization.expiresAt),
+    expires_at: formatTimestamp(authorization.expiresAt, authorization.expiresFrac),
     payment_id: authorization.paymentIds.at(-1) ?? null,
     payment_ids: [...authorization.paymentIds],
-    created_at: formatTimestamp(authorization.createdAt),
-    closed_at: authorization.closedAt === null ? null : formatTimestamp(authorization.closedAt),
+    created_at: formatTimestamp(authorization.createdAt, authorization.createdFrac),
+    closed_at: authorization.closedAt === null ? null : formatTimestamp(authorization.closedAt, authorization.closedFrac),
   };
 }
 
@@ -105,8 +105,8 @@ export const revisionView = (payment, rev) => ({
   payment_id: payment.id,
   revision: rev.revision,
   amount: rev.amount,
-  effective_at: formatTimestamp(rev.effectiveAt),
-  recorded_at: formatTimestamp(rev.recordedAt),
+  effective_at: formatTimestamp(rev.effectiveAt, rev.effectiveFrac),
+  recorded_at: formatTimestamp(rev.recordedAt, rev.recordedFrac),
   reason: rev.reason,
 });
 

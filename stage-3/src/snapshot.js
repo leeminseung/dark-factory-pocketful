@@ -30,16 +30,17 @@ export function exportState(state) {
       id: p.id, from_user_id: p.fromUserId, to_user_id: p.toUserId, amount: p.amount,
       note: p.note, visibility: p.visibility, request_id: p.requestId,
       settlement_id: p.settlementId, authorization_id: p.authorizationId, created_at_ms: p.createdAt,
+      created_at_frac: p.createdFrac,
       revisions: p.revisions.map((rev) => ({
-        revision: rev.revision, amount: rev.amount, effective_at_ms: rev.effectiveAt,
-        recorded_at_ms: rev.recordedAt, reason: rev.reason, seq: rev.seq,
+        revision: rev.revision, amount: rev.amount, effective_at_ms: rev.effectiveAt, effective_at_frac: rev.effectiveFrac,
+        recorded_at_ms: rev.recordedAt, recorded_at_frac: rev.recordedFrac, reason: rev.reason, seq: rev.seq,
       })),
     })),
     authorizations: state.authorizations.map((a) => ({
       id: a.id, from_user_id: a.fromUserId, to_user_id: a.toUserId, amount: a.amount,
       captured_amount: a.capturedAmount, note: a.note, visibility: a.visibility, status: a.status,
-      expires_at_ms: a.expiresAt, payment_ids: a.paymentIds, seeded: a.seeded, created_at_ms: a.createdAt,
-      closed_at_ms: a.closedAt,
+      expires_at_ms: a.expiresAt, expires_at_frac: a.expiresFrac, payment_ids: a.paymentIds, seeded: a.seeded,
+      created_at_ms: a.createdAt, created_at_frac: a.createdFrac, closed_at_ms: a.closedAt, closed_at_frac: a.closedFrac,
     })),
     requests: state.requests.map((r) => ({
       id: r.id, requester_id: r.requesterId, payer_id: r.payerId, amount: r.amount,
@@ -56,8 +57,8 @@ export function exportState(state) {
     idempotency: [...state.idempotency].map(([scope, record]) => ({ scope, ...record })),
     // Statement snapshots are state too: their tokens last until reset (stage 3).
     snapshots: [...state.snapshots].map(([token, sn]) => ({
-      token, user_id: sn.userId, from_ms: sn.from, to_ms: sn.to, known_at_ms: sn.knownAt, known_at_text: sn.knownAtText,
-      seq: sn.seq,
+      token, user_id: sn.userId, from_ms: sn.from, from_frac: sn.fromFrac, to_ms: sn.to, to_frac: sn.toFrac,
+      known_at_ms: sn.knownAt, known_at_frac: sn.knownAtFrac, known_at_text: sn.knownAtText, seq: sn.seq,
     })),
   };
   // A JSON round trip detaches every nested object from the live state.
@@ -91,9 +92,15 @@ function isStage1State(state) {
     && !records.some((rec) => isPlainObject(rec) && typeof rec.scope === 'string' && rec.scope.includes('"/authorizations'));
 }
 
+/**
+ * A time's digits beyond the millisecond (stage 3 R14). Exports made before fractions were kept,
+ * stage-1 and stage-2 ones included, have none: their times are whole milliseconds.
+ */
+const fracOf = (value) => (value === undefined ? '' : value);
+
 const revisionsOf = (revs) => (Array.isArray(revs) ? revs.map((rev) => (isPlainObject(rev) ? {
-  revision: rev.revision, amount: rev.amount, effectiveAt: rev.effective_at_ms,
-  recordedAt: rev.recorded_at_ms, reason: rev.reason, seq: rev.seq,
+  revision: rev.revision, amount: rev.amount, effectiveAt: rev.effective_at_ms, effectiveFrac: fracOf(rev.effective_at_frac),
+  recordedAt: rev.recorded_at_ms, recordedFrac: fracOf(rev.recorded_at_frac), reason: rev.reason, seq: rev.seq,
 } : rev)) : revs);
 
 /**
@@ -103,12 +110,12 @@ const revisionsOf = (revs) => (Array.isArray(revs) ? revs.map((rev) => (isPlainO
  * earliest time it can have closed). A fixture's closed one keeps the reset-time rule.
  */
 function closedAtOf(a, payments) {
-  if (a.status === 'open') return null;
+  if (a.status === 'open') return { closedAt: null, closedFrac: '' };
   if (a.seeded && a.status === 'expired') return seededClosedAt(a);
-  if (a.status === 'expired') return a.expiresAt;
+  if (a.status === 'expired') return { closedAt: a.expiresAt, closedFrac: a.expiresFrac };
   const captureTimes = (Array.isArray(a.paymentIds) ? a.paymentIds : [])
     .map((id) => payments.find((p) => p.id === id)?.createdAt).filter((t) => typeof t === 'number');
-  return Math.max(a.createdAt, ...captureTimes);
+  return { closedAt: Math.max(a.createdAt, ...captureTimes), closedFrac: '' };
 }
 
 /** Validates an export envelope and builds the State it describes; throws 422 on any defect. */
@@ -147,14 +154,16 @@ export function importState(envelope) {
       note: p.note, visibility: p.visibility, requestId: p.request_id,
       settlementId: p.settlement_id, authorizationId: fromStage1 ? null : p.authorization_id,
       createdAt: p.created_at_ms,
-      revisions: fromStage3 ? revisionsOf(p.revisions)
-        : [{ revision: 1, amount: p.amount, effectiveAt: p.created_at_ms, recordedAt: p.created_at_ms, reason: '' }],
+      createdFrac: fracOf(p.created_at_frac),
+      revisions: fromStage3 ? revisionsOf(p.revisions) : [{
+        revision: 1, amount: p.amount, effectiveAt: p.created_at_ms, effectiveFrac: '', recordedAt: p.created_at_ms, recordedFrac: '', reason: '',
+      }],
     })),
     authorizations: fromStage1 ? [] : list(s, 'authorizations').map((a) => ({
       id: a.id, fromUserId: a.from_user_id, toUserId: a.to_user_id, amount: a.amount,
       capturedAmount: a.captured_amount, note: a.note, visibility: a.visibility, status: a.status,
-      expiresAt: a.expires_at_ms, paymentIds: a.payment_ids, seeded: a.seeded, createdAt: a.created_at_ms,
-      closedAt: a.closed_at_ms,
+      expiresAt: a.expires_at_ms, expiresFrac: fracOf(a.expires_at_frac), paymentIds: a.payment_ids, seeded: a.seeded,
+      createdAt: a.created_at_ms, createdFrac: fracOf(a.created_at_frac), closedAt: a.closed_at_ms, closedFrac: fracOf(a.closed_at_frac),
     })),
     requests: list(s, 'requests').map((r) => ({
       id: r.id, requesterId: r.requester_id, payerId: r.payer_id, amount: r.amount,
@@ -172,14 +181,14 @@ export function importState(envelope) {
       scope: rec.scope, fingerprint: rec.fingerprint, response: rec.response,
     })),
     snapshots: fromStage3 ? list(s, 'snapshots').map((sn) => ({
-      token: sn.token, userId: sn.user_id, from: sn.from_ms, to: sn.to_ms, knownAt: sn.known_at_ms, knownAtText: sn.known_at_text,
-      seq: sn.seq,
+      token: sn.token, userId: sn.user_id, from: sn.from_ms, fromFrac: fracOf(sn.from_frac), to: sn.to_ms, toFrac: fracOf(sn.to_frac),
+      knownAt: sn.known_at_ms, knownAtFrac: fracOf(sn.known_at_frac), knownAtText: sn.known_at_text, seq: sn.seq,
     })) : [],
   };
   records.recordSequence = fromStage3 ? s.record_sequence : assignRecordSequence(records.payments);
   if (!fromStage3) {
     records.users = openingBalances(records.users, records.payments);
-    records.authorizations = records.authorizations.map((a) => ({ ...a, closedAt: closedAtOf(a, records.payments) }));
+    records.authorizations = records.authorizations.map((a) => ({ ...a, ...closedAtOf(a, records.payments) }));
   }
   checkRecords(records);
   return stateFromRecords(records);

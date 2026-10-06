@@ -2,21 +2,25 @@
 // as far as the service knew at another.
 //
 // Every question here is asked of a book { users: Map, payments: [], authorizations: [] }: the
-// live State, or the records of a reset or import being judged. Times are epoch ms.
+// live State, or the records of a reset or import being judged. Every instant here is an
+// ordering key (clock.js instantKey), so instants compare at the precision they were given (R14).
 //   as of T   (effective time) — what had happened by T;
 //   known at K (recorded time) — using only what the service had recorded by K.
 // For each payment the selected revision is its latest one recorded at or before K; a payment
 // with none contributes nothing. Selected revisions apply at their effective time.
 
-const NEVER = Number.POSITIVE_INFINITY;
+import { NEVER_KEY as NEVER, compareKeys } from './clock.js';
+import { closedKey, createdKey, effectiveKey, expiresKey, recordedKey } from './model.js';
+
+const INF = Number.POSITIVE_INFINITY;
 
 /**
  * The payment's latest revision recorded at or before `knownAt`, and (for a statement snapshot)
  * among the first `upToSeq` recorded, or null.
  */
-export function selectedRevision(payment, knownAt = NEVER, upToSeq = NEVER) {
+export function selectedRevision(payment, knownAt = NEVER, upToSeq = INF) {
   let chosen = null;
-  for (const rev of payment.revisions) if (rev.recordedAt <= knownAt && rev.seq <= upToSeq) chosen = rev;
+  for (const rev of payment.revisions) if (recordedKey(rev) <= knownAt && rev.seq <= upToSeq) chosen = rev;
   return chosen;
 }
 
@@ -24,19 +28,19 @@ export function selectedRevision(payment, knownAt = NEVER, upToSeq = NEVER) {
 export const currentRevision = (payment) => payment.revisions.at(-1);
 
 /** The user's money movements under `knownAt`: { payment, rev, time, delta }, in no order. */
-export function movements(book, userId, knownAt = NEVER, upToSeq = NEVER) {
+export function movements(book, userId, knownAt = NEVER, upToSeq = INF) {
   const out = [];
   for (const payment of book.payments) {
     const sign = payment.fromUserId === userId ? -1 : payment.toUserId === userId ? 1 : 0;
     if (sign === 0) continue;
     const rev = selectedRevision(payment, knownAt, upToSeq);
-    if (rev) out.push({ payment, rev, time: rev.effectiveAt, delta: sign * rev.amount });
+    if (rev) out.push({ payment, rev, time: effectiveKey(rev), delta: sign * rev.amount });
   }
   return out;
 }
 
 /** Statement order: effective time, then payment id (stage 3). */
-const byTimeThenId = (a, b) => a.time - b.time || (a.payment.id < b.payment.id ? -1 : a.payment.id > b.payment.id ? 1 : 0);
+const byTimeThenId = (a, b) => compareKeys(a.time, b.time) || compareKeys(a.payment.id, b.payment.id);
 
 /** The user's total (balance) after every movement effective at or before `asOf`. */
 export function balanceAt(book, userId, asOf, knownAt = NEVER) {
@@ -49,7 +53,7 @@ export function balanceAt(book, userId, asOf, knownAt = NEVER) {
  * An authorization that closed at or before its creation, with no capture, never held anything
  * (a fixture's closed one, model.js seededClosedAt).
  */
-const neverHeld = (a) => a.closedAt !== null && a.closedAt <= a.createdAt && a.paymentIds.length === 0;
+const neverHeld = (a) => closedKey(a) <= createdKey(a) && a.paymentIds.length === 0;
 
 /**
  * What one authorization held at `t`, as known at `knownAt`. A hold starts at creation; each
@@ -60,13 +64,13 @@ const neverHeld = (a) => a.closedAt !== null && a.closedAt <= a.createdAt && a.p
 export function authorizationHoldAt(book, authorization, t, knownAt = NEVER) {
   const a = authorization;
   if (neverHeld(a)) return 0;
-  if (a.createdAt > t || a.createdAt > knownAt) return 0;
-  const closingKnown = a.closedAt !== null && a.closedAt <= knownAt ? a.closedAt : NEVER;
-  if (Math.min(closingKnown, a.expiresAt) <= t) return 0;
+  if (createdKey(a) > t || createdKey(a) > knownAt) return 0;
+  const closingKnown = closedKey(a) <= knownAt ? closedKey(a) : NEVER;
+  if (closingKnown <= t || expiresKey(a) <= t) return 0;
   let captured = 0;
   for (const id of a.paymentIds) {
     const capture = book.paymentsById.get(id);
-    if (capture.createdAt <= t && capture.createdAt <= knownAt) captured += capture.revisions[0].amount;
+    if (createdKey(capture) <= t && createdKey(capture) <= knownAt) captured += capture.revisions[0].amount;
   }
   return Math.max(0, a.amount - captured);
 }
@@ -93,7 +97,7 @@ export function moneyAt(book, userId, asOf, knownAt = NEVER) {
  * opening balance just before `from`, entries oldest first with the balance after each, and the
  * closing balance just before `to`.
  */
-export function statement(book, userId, { from, to, knownAt = NEVER, upToSeq = NEVER }) {
+export function statement(book, userId, { from, to, knownAt = NEVER, upToSeq = INF }) {
   const all = movements(book, userId, knownAt, upToSeq).sort(byTimeThenId);
   let opening = book.users.get(userId).openingBalance;
   const entries = [];
@@ -112,14 +116,14 @@ export function statement(book, userId, { from, to, knownAt = NEVER, upToSeq = N
 /** One authorization's effect on the payer's held total, as (time, change) events, all known. */
 function holdEvents(book, a) {
   if (neverHeld(a)) return [];
-  const events = [{ time: a.createdAt, held: a.amount }];
-  const close = Math.min(a.closedAt ?? NEVER, a.expiresAt);
+  const events = [{ time: createdKey(a), held: a.amount }];
+  const close = closedKey(a) < expiresKey(a) ? closedKey(a) : expiresKey(a);
   let captured = 0;
   for (const id of a.paymentIds) {
     const capture = book.paymentsById.get(id);
-    if (capture.createdAt > close) continue;
+    if (createdKey(capture) > close) continue;
     captured += capture.revisions[0].amount;
-    events.push({ time: capture.createdAt, held: -capture.revisions[0].amount });
+    events.push({ time: createdKey(capture), held: -capture.revisions[0].amount });
   }
   if (close !== NEVER) events.push({ time: close, held: -Math.max(0, a.amount - captured) });
   return events;
@@ -138,7 +142,7 @@ export function firstOverdraft(book, userId, payments = book.payments) {
   for (const a of book.authorizations) {
     if (a.fromUserId === userId) for (const e of holdEvents(book, a)) events.push({ time: e.time, total: 0, held: e.held });
   }
-  events.sort((x, y) => x.time - y.time);
+  events.sort((x, y) => compareKeys(x.time, y.time));
   let total = opening;
   let held = 0;
   for (let i = 0; i < events.length;) {

@@ -6,10 +6,10 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, expiryOf, isAuthorizationStatus, isIntegralNumber, isLinkedPayment, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, closedKey, createdKey, effectiveKey, expiresKey, recordedKey, expiryOf, isAuthorizationStatus, isIntegralNumber, isLinkedPayment, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
-import { parseInstant, parseTimestamp } from './clock.js';
+import { compareKeys, instantKey, isFrac, parseInstant } from './clock.js';
 import {
   authorizationView, paymentView, requestView, revisionView, settlementView, splitView,
 } from './views.js';
@@ -27,15 +27,16 @@ import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
  *   tokens:       [{ token, userId }]
  *   authorizationTtlSeconds
  *   payments:     { id, fromUserId, toUserId, amount, note, visibility, requestId, settlementId,
- *                   authorizationId, createdAt,
- *                   revisions: [{ revision, amount, effectiveAt, recordedAt, reason }] }
+ *                   authorizationId, createdAt, createdFrac,
+ *                   revisions: [{ revision, amount, effectiveAt, effectiveFrac, recordedAt, recordedFrac, reason, seq }] }
  *                 (amount is the original amount, revision 1; stage 3)
+ *                 (each …Frac: the time's digits beyond the millisecond, clock.js; stage 3 R14)
  *   requests:     { id, requesterId, payerId, amount, note, status, paymentId, seeded, createdAt }
  *                 (seeded: came from a fixture, which may say `paid` without naming a payment)
  *   splits:       { id, requesterId, amount, note, shares: [{ handle, amount }], requestIds, createdAt }
  *   settlements:  { id, committedAt, paymentIds }
  *   authorizations: { id, fromUserId, toUserId, amount, capturedAmount, note, visibility, status,
- *                   expiresAt, paymentIds, seeded, createdAt, closedAt }
+ *                   expiresAt, expiresFrac, paymentIds, seeded, createdAt, createdFrac, closedAt, closedFrac }
  *                 (seeded: came from a fixture, whose `captured` ones name no payment)
  *   idempotency:  [{ scope, fingerprint, response }]
  *   snapshots:    [{ token, userId, from, to, knownAt, knownAtText }]   (statement snapshots, stage 3)
@@ -88,7 +89,7 @@ export function checkRecords(r) {
     check(isVisibility(p.visibility), `${at}.visibility is invalid`);
     check(isOptionalId(p.requestId) && isOptionalId(p.settlementId) && isOptionalId(p.authorizationId),
       `${at} links are invalid`);
-    check(isTimestampMs(p.createdAt), `${at} timestamp is invalid`);
+    check(isTimestampMs(p.createdAt) && isFrac(p.createdFrac), `${at} timestamp is invalid`);
     checkRevisions(p, at);
   });
   requireUnique(r.payments.map((p) => p.id), 'payment id');
@@ -140,10 +141,12 @@ export function checkRecords(r) {
     check(isNote(a.note), `${at}.note is invalid`);
     check(isVisibility(a.visibility), `${at}.visibility is invalid`);
     check(isAuthorizationStatus(a.status), `${at}.status is invalid`);
-    check(isTimestampMs(a.expiresAt) && isTimestampMs(a.createdAt), `${at} timestamps are invalid`);
+    check(isTimestampMs(a.expiresAt) && isFrac(a.expiresFrac) && isTimestampMs(a.createdAt) && isFrac(a.createdFrac),
+      `${at} timestamps are invalid`);
     check(isList(a.paymentIds, (id) => paymentIds.has(id)), `${at}.payment_ids are invalid`);
     check(typeof a.seeded === 'boolean', `${at}.seeded must be a boolean`);
-    check(a.status === 'open' ? a.closedAt === null : isTimestampMs(a.closedAt), `${at}.closed_at is invalid`);
+    check(isFrac(a.closedFrac) && (a.status === 'open' ? a.closedAt === null && a.closedFrac === '' : isTimestampMs(a.closedAt)),
+      `${at}.closed_at is invalid`);
   });
   requireUnique(r.authorizations.map((a) => a.id), 'authorization id');
 
@@ -169,14 +172,14 @@ function checkRevisions(p, at) {
   check(Array.isArray(revs) && revs.length >= 1 && revs.every(isPlainObject), `${at}.revisions are invalid`);
   revs.forEach((rev, i) => {
     check(rev.revision === i + 1, `${at}.revisions are not numbered in order`);
-    check(isRecordAmount(rev.amount) && isTimestampMs(rev.effectiveAt) && isTimestampMs(rev.recordedAt),
-      `${at}.revisions[${i}] fields are invalid`);
+    check(isRecordAmount(rev.amount) && isTimestampMs(rev.effectiveAt) && isFrac(rev.effectiveFrac)
+      && isTimestampMs(rev.recordedAt) && isFrac(rev.recordedFrac), `${at}.revisions[${i}] fields are invalid`);
     check(i === 0 ? rev.reason === '' : isReason(rev.reason), `${at}.revisions[${i}].reason is invalid`);
-    check(i === 0 || (rev.effectiveAt <= rev.recordedAt && rev.recordedAt > revs[i - 1].recordedAt),
+    check(i === 0 || (effectiveKey(rev) <= recordedKey(rev) && recordedKey(rev) > recordedKey(revs[i - 1])),
       `${at}.revisions[${i}] times are out of order`);
   });
   const [first] = revs;
-  check(first.amount === p.amount && first.effectiveAt === p.createdAt && first.recordedAt === p.createdAt,
+  check(first.amount === p.amount && effectiveKey(first) === createdKey(p) && recordedKey(first) === createdKey(p),
     `${at}.revisions[0] is not the payment as made`);
   check(revs.length === 1 || !isLinkedPayment(p),
     `${at} is a linked payment and cannot have corrections`);
@@ -207,7 +210,7 @@ function checkRecordSequence(r) {
     'a revision has an invalid recording number');
   requireUnique(revs.map((rev) => rev.seq), 'revision recording number');
   const ordered = [...revs].sort((a, b) => a.seq - b.seq);
-  check(ordered.every((rev, i) => i === 0 || ordered[i - 1].recordedAt <= rev.recordedAt),
+  check(ordered.every((rev, i) => i === 0 || recordedKey(ordered[i - 1]) <= recordedKey(rev)),
     'revisions are not numbered in recording order');
 }
 
@@ -217,7 +220,7 @@ function checkRecordSequence(r) {
  */
 export function assignRecordSequence(payments) {
   const revs = payments.flatMap((p) => (Array.isArray(p.revisions) ? p.revisions : []));
-  revs.sort((a, b) => a.recordedAt - b.recordedAt).forEach((rev, i) => { rev.seq = i + 1; });
+  revs.sort((a, b) => compareKeys(recordedKey(a), recordedKey(b))).forEach((rev, i) => { rev.seq = i + 1; });
   return revs.length;
 }
 
@@ -252,13 +255,16 @@ function checkSnapshots(r, isUser) {
   r.snapshots.forEach((sn, i) => {
     const at = `snapshots[${i}]`;
     check(typeof sn.token === 'string' && sn.token !== '' && isUser(sn.userId), `${at} owner or token is invalid`);
-    check((sn.from === null || isTimestampMs(sn.from)) && isTimestampMs(sn.to) && (sn.from === null || sn.from <= sn.to),
+    const window = [isFrac(sn.fromFrac) && isFrac(sn.toFrac) && isFrac(sn.knownAtFrac),
+      sn.from === null ? sn.fromFrac === '' : isTimestampMs(sn.from), isTimestampMs(sn.to)];
+    check(window.every(Boolean) && (sn.from === null || instantKey(sn.from, sn.fromFrac) <= instantKey(sn.to, sn.toFrac)),
       `${at} window is invalid`);
     // The watermark is a recording number: what had been recorded when the snapshot was read.
     check(isIntegralNumber(sn.seq) && sn.seq >= 0 && sn.seq <= r.recordSequence, `${at} watermark is invalid`);
     check(sn.knownAt === null ? sn.knownAtText === null : isTimestampMs(sn.knownAt), `${at} known_at is invalid`);
     const echo = sn.knownAtText === null ? null : parseInstant(sn.knownAtText);
-    check(sn.knownAtText === null || (echo !== null && echo.ms === sn.knownAt), `${at} known_at echo is invalid`);
+    check(sn.knownAtText === null ? sn.knownAtFrac === '' : echo !== null && echo.ms === sn.knownAt && echo.frac === sn.knownAtFrac,
+      `${at} known_at echo is invalid`);
   });
   requireUnique(r.snapshots.map((sn) => sn.token), 'snapshot token');
 }
@@ -281,14 +287,15 @@ function checkLedger(r) {
  */
 function checkTimes(r) {
   const created = [
-    ...r.payments.map((p) => p.createdAt), ...r.requests.map((q) => q.createdAt), ...r.splits.map((sp) => sp.createdAt),
-    ...r.settlements.map((st) => st.committedAt), ...r.authorizations.map((a) => a.createdAt),
+    ...r.payments.map(createdKey), ...r.requests.map((q) => instantKey(q.createdAt)), ...r.splits.map((sp) => instantKey(sp.createdAt)),
+    ...r.settlements.map((st) => instantKey(st.committedAt)), ...r.authorizations.map(createdKey),
   ];
-  const recorded = r.payments.flatMap((p) => p.revisions.map((rev) => rev.recordedAt));
-  const closed = r.authorizations.filter((a) => a.status === 'captured' || a.status === 'voided').map((a) => a.closedAt);
-  check([...created, ...recorded, ...closed].every((t) => t <= r.lastTimestampMs), 'a record was created after the clock');
+  const recorded = r.payments.flatMap((p) => p.revisions.map(recordedKey));
+  const closed = r.authorizations.filter((a) => a.status === 'captured' || a.status === 'voided').map(closedKey);
+  const clock = instantKey(r.lastTimestampMs);
+  check([...created, ...recorded, ...closed].every((t) => t <= clock), 'a record was created after the clock');
   for (const a of r.authorizations) {
-    check(a.seeded || a.expiresAt === expiryOf(a.createdAt, r.authorizationTtlSeconds),
+    check(a.seeded || (a.expiresAt === expiryOf(a.createdAt, r.authorizationTtlSeconds) && a.expiresFrac === a.createdFrac),
       `authorization ${a.id} does not expire at created_at + authorization_ttl_seconds`);
   }
 }
@@ -364,7 +371,7 @@ function checkLinks(r) {
     }
     if (p.settlementId !== null) {
       const st = settlements.get(p.settlementId);
-      check(st && st.paymentIds.includes(p.id) && st.committedAt === p.createdAt && p.requestId === null,
+      check(st && st.paymentIds.includes(p.id) && createdKey(p) === instantKey(st.committedAt) && p.requestId === null,
         `payment ${p.id} names a settlement it is not a member of`);
     }
   }
@@ -388,11 +395,11 @@ function checkLinks(r) {
     check(a.status !== 'captured' || unrecorded || captures.length > 0, `authorization ${a.id} is captured without a payment`);
     // closed_at is the closing event's time (stage 3): expiry at expires_at, a final capture at its
     // payment, a void after every capture. A fixture's closed one carries the reset time instead.
-    const lastCapture = captures.reduce((t, p) => Math.max(t, p.createdAt), a.createdAt);
+    const lastCapture = captures.map(createdKey).reduce((t, key) => (key > t ? key : t), createdKey(a));
     const closedRight = a.status === 'open' || a.seeded || {
-      expired: a.closedAt === a.expiresAt,
-      captured: a.closedAt === lastCapture,
-      voided: a.closedAt >= lastCapture,
+      expired: closedKey(a) === expiresKey(a),
+      captured: closedKey(a) === lastCapture,
+      voided: closedKey(a) >= lastCapture,
     }[a.status];
     check(closedRight, `authorization ${a.id} closed_at does not match how it closed`);
   }
@@ -481,6 +488,8 @@ function sameReceipt(stored, expected) {
   return canonicalJson(stored) === canonicalJson(strip(expected, stored));
 }
 
+const sameInstant = (instant, ms, frac) => instant !== null && instant.ms === ms && instant.frac === frac;
+
 const REPLAY_RULES = {
   '/payments': ({ userId, body, receipt, records, view }) => {
     const p = records.payments.get(receipt.payment_id);
@@ -519,7 +528,7 @@ const REPLAY_RULES = {
     const rev = p?.revisions[receipt.revision - 1];
     return Boolean(rev) && rev.revision > 1 && p.fromUserId === userId
       && body.expected_revision === rev.revision - 1 && body.amount === rev.amount
-      && parseTimestamp(body.effective_at) === rev.effectiveAt && body.reason === rev.reason
+      && sameInstant(parseInstant(body.effective_at), rev.effectiveAt, rev.effectiveFrac) && body.reason === rev.reason
       && sameReceipt(receipt, revisionView(p, rev));
   },
   '/authorizations': ({ userId, body, receipt, records, view }) => {

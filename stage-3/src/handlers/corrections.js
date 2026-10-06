@@ -1,5 +1,5 @@
 // Payment corrections and revision history (stage 3).
-import { parseTimestamp } from '../clock.js';
+import { instantKey, parseInstant } from '../clock.js';
 import { forbidden, invalid, linkedPaymentImmutable, notFound, staleRevision } from '../errors.js';
 import { currentRevision } from '../ledger.js';
 import { MIN_TIMESTAMP_MS, isIntegralNumber, isLinkedPayment, isReason, isRecordAmount } from '../model.js';
@@ -15,11 +15,11 @@ function correctionTerms(body, now) {
   const { expected_revision: expected, amount, effective_at: effectiveText, reason } = body;
   if (!isIntegralNumber(expected) || expected < 1) throw invalid('expected_revision must be a positive integer');
   if (!isRecordAmount(amount)) throw invalid('amount must be an integer from 0 to 1000000000');
-  const effectiveAt = parseTimestamp(effectiveText);
-  if (effectiveAt === null || effectiveAt < MIN_TIMESTAMP_MS) throw invalid('effective_at must be an RFC 3339 instant with an offset');
-  if (effectiveAt > now) throw invalid('effective_at must not be later than now');
+  const effective = parseInstant(effectiveText);
+  if (effective === null || effective.ms < MIN_TIMESTAMP_MS) throw invalid('effective_at must be an RFC 3339 instant with an offset');
+  if (instantKey(effective.ms, effective.frac) > instantKey(now)) throw invalid('effective_at must not be later than now');
   if (!isReason(reason)) throw invalid('reason must be a string of 1 to 200 characters');
-  return { expected, amount, effectiveAt, reason };
+  return { expected, amount, effectiveAt: effective.ms, effectiveFrac: effective.frac, reason };
 }
 
 /** Idempotent: only the original sender corrects; returns the 201 body, the new revision. */

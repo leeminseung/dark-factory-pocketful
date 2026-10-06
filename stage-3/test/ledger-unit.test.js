@@ -1,20 +1,22 @@
 // src/ledger.js: the one-pass overdraft check agrees with the boundary-by-boundary definition.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { compareKeys } from '../src/clock.js';
 import { balanceAt, firstOverdraft, heldAt } from '../src/ledger.js';
+import { closedKey, createdKey, effectiveKey, expiresKey } from '../src/model.js';
 
 /** The definition: at each boundary, total = balance as of it, available = total − held as of it. */
 function slowOverdraft(book, userId) {
   const times = new Set();
   for (const p of book.payments) {
-    if (p.fromUserId === userId || p.toUserId === userId) times.add(p.revisions.at(-1).effectiveAt);
+    if (p.fromUserId === userId || p.toUserId === userId) times.add(effectiveKey(p.revisions.at(-1)));
   }
   for (const a of book.authorizations) {
     if (a.fromUserId !== userId) continue;
-    [a.createdAt, a.expiresAt, a.closedAt].filter((t) => t !== null).forEach((t) => times.add(t));
-    a.paymentIds.forEach((id) => times.add(book.paymentsById.get(id).createdAt));
+    [createdKey(a), expiresKey(a)].concat(a.closedAt === null ? [] : [closedKey(a)]).forEach((t) => times.add(t));
+    a.paymentIds.forEach((id) => times.add(createdKey(book.paymentsById.get(id))));
   }
-  for (const t of [...times].sort((x, y) => x - y)) {
+  for (const t of [...times].sort(compareKeys)) {
     const total = balanceAt(book, userId, t);
     if (total < 0) return { at: t, what: 'total' };
     if (total - heldAt(book, userId, t) < 0) return { at: t, what: 'available' };

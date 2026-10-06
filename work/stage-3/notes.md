@@ -28,27 +28,33 @@ The stage-1 and stage-2 notes still apply to everything stage 3 did not change.
 
   A correction's recorded time is the service clock, at least 1 ms after the payment's previous
   revision.
-- **One instant rule** (R6, R10; clock.js):
+- **One instant rule** (R6, R14; clock.js):
   - every instant the service reads is RFC 3339 with an offset, and "T"/"Z" may be lowercase;
-  - every instant is truncated to the millisecond, stored or queried, so one instant names one
-    millisecond everywhere. Truncation keeps "at exactly that instant" inclusive for clients that
-    send microseconds.
+  - every instant keeps the precision it was given (R14, replacing R10's truncation). A time is held
+    as whole milliseconds plus its further digits (`…Frac`, trailing zeros dropped), and every
+    comparison goes through one ordering key (clock.js instantKey) built from both. Rounding either
+    way would misplace an instant near a millisecond edge, so neither is used.
+  - times the service stamps itself (created_at of API writes, recorded_at of corrections, the clock)
+    stay whole milliseconds. "Now" is that whole millisecond: an effective_at later than it, even by a
+    fraction, is 422, and a seeded expires_at a fraction past it has not yet expired.
+  - responses give back each instant at its own precision; the export carries each fraction as
+    `…_frac` beside `…_ms`. An export without them (stage 1, stage 2, or before R14) has whole
+    milliseconds.
+  - stage-2/ is left as it is: there the only comparison of a supplied instant is a seeded expires_at
+    against "now", which is itself known only to the millisecond (S2-097), so no stage-2 rule is broken.
 - **The statement's default `to`** is "now", taken as the end of the read's own millisecond. A
   payment already made in that millisecond is on the statement; an explicit `to` stays strictly
   exclusive.
 - **`from` after `to` is 422**: in such a window, opening + deltas = closing (statement rule 3) could
   not hold.
-- **Snapshots are a window and a watermark** (R1). A snapshot stores its owner, from, to, the known_at it
-  echoes, and the watermark min(known_at, the read's instant). Each page recomputes the window from
-  the payments' revisions, which never change once recorded. `State.freezeReadAt` stamps everything
-  recorded after the read strictly later, so no later revision falls under the watermark. Memory per
-  snapshot is constant.
-- **Clock-bound residual:** at the clock's fixed bound (MAX_CLOCK_MS) the clock cannot move past a
-  read. A write stamped at the bound in the same millisecond as a later snapshot read would join
-  that snapshot. Reaching this needs a state imported with its clock at 9899-12-30.
+- **Snapshots are a window and a watermark** (R1, R13). A snapshot stores its owner, its window, the
+  known_at it echoes, and a watermark: the recording number of the last revision recorded when it was
+  read. Every revision gets the next recording number as it is recorded. Each page recomputes the
+  window from the revisions numbered at or below the watermark, which never change once recorded, so
+  reads move no clock and memory per snapshot is constant.
 - **Snapshots are exported and imported** (R3, ruling f9a6a09): "Tokens last until reset", and import
   is not a reset. Import checks each one: a known owner; a valid window with from ≤ to; a watermark
-  not after the clock; an echo, when present, at or after the watermark. A stage-1 or stage-2 export
+  no greater than the revisions recorded; an echo, when present, that is its known_at. A stage-1 or stage-2 export
   has none.
 - **closed_at:**
   - a final capture closes at its capture payment;

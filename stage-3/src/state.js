@@ -193,8 +193,12 @@ export class State {
         settlementId,
         authorizationId,
         createdAt,
+        createdFrac: '', // the service stamps whole milliseconds (clock.js)
         // Stage 3: revision 1 is the payment as made; corrections append later revisions.
-        revisions: [{ revision: 1, amount: t.amount, effectiveAt: createdAt, recordedAt: createdAt, reason: '', seq: this.nextRecordSeq() }],
+        revisions: [{
+          revision: 1, amount: t.amount, effectiveAt: createdAt, effectiveFrac: '', recordedAt: createdAt, recordedFrac: '',
+          reason: '', seq: this.nextRecordSeq(),
+        }],
       };
       this.addPayment(payment);
       return payment;
@@ -239,7 +243,7 @@ export class State {
    * available would be negative at any past boundary. The caller runs this in a transaction, so a
    * refusal leaves balances, revisions and everything else as they were.
    */
-  correctPayment(payment, { amount, effectiveAt, reason }) {
+  correctPayment(payment, { amount, effectiveAt, effectiveFrac, reason }) {
     const previous = currentRevision(payment);
     const delta = amount - previous.amount;
     // Checked before anything changes, so the refusal precedes the clock and revision updates.
@@ -249,7 +253,9 @@ export class State {
     const clockBefore = this.lastTimestampMs;
     this.remember(() => { this.lastTimestampMs = clockBefore; });
     this.lastTimestampMs = recordedAt;
-    const revision = { revision: previous.revision + 1, amount, effectiveAt, recordedAt, reason, seq: this.nextRecordSeq() };
+    const revision = {
+      revision: previous.revision + 1, amount, effectiveAt, effectiveFrac, recordedAt, recordedFrac: '', reason, seq: this.nextRecordSeq(),
+    };
     const revisionsBefore = payment.revisions;
     this.remember(() => { payment.revisions = revisionsBefore; });
     payment.revisions = [...payment.revisions, revision];
@@ -277,22 +283,24 @@ export class State {
   expireDue(now) {
     for (const a of this.openAuthorizations) {
       // Expiry takes effect at expires_at, whenever the sweep notices it (stage 3).
-      if (isDue(a, now)) this.closeAuthorization(a, 'expired', a.expiresAt);
+      if (isDue(a, now)) this.closeAuthorization(a, 'expired', a.expiresAt, a.expiresFrac);
     }
   }
 
   /**
    * The one place an authorization closes: captured, voided or expired, at `closedAt` (the
-   * event's time). Keeps the set of holds in step and records closed_at (stage 3).
+   * event's time, with its fraction beyond the millisecond). Keeps the set of holds in step and
+   * records closed_at (stage 3).
    */
-  closeAuthorization(authorization, status, closedAt) {
-    const before = { status: authorization.status, closedAt: authorization.closedAt };
+  closeAuthorization(authorization, status, closedAt, closedFrac = '') {
+    const before = { status: authorization.status, closedAt: authorization.closedAt, closedFrac: authorization.closedFrac };
     this.remember(() => {
       Object.assign(authorization, before);
       if (before.status === 'open') this.openAuthorizations.add(authorization);
     });
     authorization.status = status;
     authorization.closedAt = closedAt;
+    authorization.closedFrac = closedFrac;
     this.openAuthorizations.delete(authorization);
   }
 
@@ -306,10 +314,13 @@ export class State {
       capturedAmount: 0,
       status: 'open',
       expiresAt: expiryOf(createdAt, this.authorizationTtlSeconds),
+      expiresFrac: '',
       paymentIds: [],
       seeded: false,
       createdAt,
+      createdFrac: '',
       closedAt: null,
+      closedFrac: '',
     };
     this.addAuthorization(authorization);
     return authorization;

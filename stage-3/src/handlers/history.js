@@ -1,6 +1,6 @@
 // GET /me (stage 1, 2; stage 3 as_of / known_at) and GET /statement (stage 3).
 import { randomBytes } from 'node:crypto';
-import { formatTimestamp } from '../clock.js';
+import { formatTimestamp, instantKey } from '../clock.js';
 import { invalid, notFound } from '../errors.js';
 import { moneyAt, statement as statementOf } from '../ledger.js';
 import { paginate, paging, queryInstant } from '../paging.js';
@@ -16,7 +16,7 @@ export function me({ state, user, query, now }) {
   const knownAt = queryInstant(query, 'known_at');
   const body = meView(state, user);
   if (!asOf && !knownAt) return { status: 200, body };
-  const money = moneyAt(state, user.id, asOf ? asOf.ms : now, knownAt ? knownAt.ms : undefined);
+  const money = moneyAt(state, user.id, asOf ? asOf.key : instantKey(now), knownAt ? knownAt.key : undefined);
   return {
     status: 200,
     body: {
@@ -34,8 +34,8 @@ function entryView(state, entry) {
     delta: entry.delta,
     balance_after: entry.balanceAfter,
     revision: entry.rev.revision,
-    effective_at: formatTimestamp(entry.rev.effectiveAt),
-    recorded_at: formatTimestamp(entry.rev.recordedAt),
+    effective_at: formatTimestamp(entry.rev.effectiveAt, entry.rev.effectiveFrac),
+    recorded_at: formatTimestamp(entry.rev.recordedAt, entry.rev.recordedFrac),
   };
 }
 
@@ -46,7 +46,10 @@ function entryView(state, entry) {
  */
 function pageOf(state, snapshot, token, page) {
   const result = statementOf(state, snapshot.userId, {
-    from: snapshot.from, to: snapshot.to, knownAt: snapshot.knownAt ?? undefined, upToSeq: snapshot.seq,
+    from: snapshot.from === null ? null : instantKey(snapshot.from, snapshot.fromFrac),
+    to: instantKey(snapshot.to, snapshot.toFrac),
+    knownAt: snapshot.knownAt === null ? undefined : instantKey(snapshot.knownAt, snapshot.knownAtFrac),
+    upToSeq: snapshot.seq,
   });
   const { items, hasMore } = paginate(result.entries, page);
   return {
@@ -83,16 +86,18 @@ export function statement({ state, user, query, now }) {
   const knownAt = queryInstant(query, 'known_at');
   // [from, to): a payment at from counts, one at to does not. The default `to` is now, taken to
   // cover the read's own millisecond, so a payment already made in it is on the statement.
-  const fromMs = from ? from.ms : null;
-  const toMs = to ? to.ms : now + 1;
-  if (fromMs !== null && fromMs > toMs) throw invalid('from must not be after to');
+  const end = to ?? { ms: now + 1, frac: '', key: instantKey(now + 1) };
+  if (from && from.key > end.key) throw invalid('from must not be after to');
   // What this read could know: the revisions recorded so far (by recording number, so nothing
   // recorded later can count, and the read moves no clock), and at most known_at.
   const snapshot = {
     userId: user.id,
-    from: fromMs,
-    to: toMs,
+    from: from ? from.ms : null,
+    fromFrac: from ? from.frac : '',
+    to: end.ms,
+    toFrac: end.frac,
     knownAt: knownAt ? knownAt.ms : null,
+    knownAtFrac: knownAt ? knownAt.frac : '',
     knownAtText: knownAt ? knownAt.text : null,
     seq: state.recordSequence,
   };

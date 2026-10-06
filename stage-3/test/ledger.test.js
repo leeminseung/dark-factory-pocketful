@@ -55,7 +55,10 @@ test('S3: payments carry revision 1 and authorizations closed_at through export 
   for (const p of s.payments) {
     const { seq, ...rev } = p.revisions[0];
     assert.equal(p.revisions.length, 1);
-    assert.deepEqual(rev, { revision: 1, amount: p.amount, effective_at_ms: p.created_at_ms, recorded_at_ms: p.created_at_ms, reason: '' });
+    assert.deepEqual(rev, {
+      revision: 1, amount: p.amount, effective_at_ms: p.created_at_ms, effective_at_frac: p.created_at_frac,
+      recorded_at_ms: p.created_at_ms, recorded_at_frac: p.created_at_frac, reason: '',
+    });
     assert.ok(Number.isInteger(seq) && seq >= 1 && seq <= s.record_sequence);
   }
   const capture = s.payments.find((p) => p.authorization_id === a.authorization_id);

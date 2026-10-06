@@ -1,5 +1,7 @@
 // POST /payments and GET /activity (§4 feed contract, §8).
+import { compareKeys } from '../clock.js';
 import { selfPayment } from '../errors.js';
+import { createdKey } from '../model.js';
 import { counterparty } from './handles.js';
 import { paginate, paging } from '../paging.js';
 import { amount, note, requiredString, visibility } from '../validate.js';
@@ -29,7 +31,7 @@ export function activity({ state, user, query }) {
   // fixture); creation order breaks ties, newest first.
   const visible = state.payments.map((p, order) => ({ p, order }))
     .filter(({ p }) => canSeePayment(p, user.id))
-    .sort((a, b) => b.p.createdAt - a.p.createdAt || b.order - a.order)
+    .sort((a, b) => compareKeys(createdKey(b.p), createdKey(a.p)) || b.order - a.order)
     .map(({ p }) => p);
   const { items, hasMore } = paginate(visible, page);
   return { status: 200, body: { payments: items.map((p) => paymentView(state, p)), has_more: hasMore } };
