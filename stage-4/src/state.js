@@ -273,10 +273,7 @@ export class State {
       payment.revisions = [...payment.revisions, revision];
       return revision;
     });
-    if (batchId !== null) {
-      this.correctionBatchIds.add(batchId);
-      this.remember(() => this.correctionBatchIds.delete(batchId));
-    }
+    if (batchId !== null) this.noteCorrectionBatch(batchId);
     for (const userId of net.keys()) {
       if (firstOverdraft(this, userId) !== null) throw historicalOverdraft();
     }
@@ -441,7 +438,14 @@ export class State {
       this.refundedBy.set(payment.refundOf, (before ?? 0) + payment.amount);
       this.remember(() => (before === undefined ? this.refundedBy.delete(payment.refundOf) : this.refundedBy.set(payment.refundOf, before)));
     }
-    for (const rev of payment.revisions) if (rev.correctionBatchId !== null) this.correctionBatchIds.add(rev.correctionBatchId);
+    for (const rev of payment.revisions) if (rev.correctionBatchId !== null) this.noteCorrectionBatch(rev.correctionBatchId);
+  }
+
+  /** Records that a correction batch id is in use, undoably. */
+  noteCorrectionBatch(batchId) {
+    if (this.correctionBatchIds.has(batchId)) return;
+    this.correctionBatchIds.add(batchId);
+    this.remember(() => this.correctionBatchIds.delete(batchId));
   }
 
   addRequest(request) {
