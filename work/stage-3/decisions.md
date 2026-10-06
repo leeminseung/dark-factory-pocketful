@@ -18,6 +18,7 @@
   unknown payment 404; extreme query instants never 5xx / non-RFC 3339.
 - Suite ready c9e81b1 (994 tests: 554 + 304 + 136); command `work/acceptance/run.sh stage-3 3`; sent to implementer.
   List-check rows not yet added; re-requested as S3-070..S3-074.
+- List complete at 72 rows (S3-070..S3-074 in 5bf221d, D3-8); suite 3891982 (1050 tests).
 
 ## Rounds
 
