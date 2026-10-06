@@ -1,0 +1,20 @@
+375-wallet-held-modest.png  scrollWidth=375 clientWidth=375
+375 Wallet small targets: []
+375 Requests small targets: []
+375 Split small targets: []
+375 Reserved small targets: []
+375-focus-in-panel.png  scrollWidth=375 clientWidth=375
+375-pay-loading.png  scrollWidth=375 clientWidth=375
+375-refresh-loading.png  scrollWidth=375 clientWidth=375
+375-after-authorize-modest.png  scrollWidth=375 clientWidth=375
+375-requests-loading.png  scrollWidth=375 clientWidth=375
+375-reserved-loading.png  scrollWidth=375 clientWidth=375
+375-activity-loading.png  scrollWidth=375 clientWidth=375
+1280-wallet-held-modest.png  scrollWidth=1280 clientWidth=1280
+1280-focus-in-panel.png  scrollWidth=1280 clientWidth=1280
+1280-pay-loading.png  scrollWidth=1280 clientWidth=1280
+1280-refresh-loading.png  scrollWidth=1280 clientWidth=1280
+1280-after-authorize-modest.png  scrollWidth=1280 clientWidth=1280
+1280-requests-loading.png  scrollWidth=1280 clientWidth=1280
+1280-reserved-loading.png  scrollWidth=1280 clientWidth=1280
+1280-activity-loading.png  scrollWidth=1280 clientWidth=1280
