@@ -19,7 +19,7 @@ def pay_rec(pid, frm, to, amount, created_at=None, note="", visibility="public")
     p = {"id": pid, "from_user_id": f"u_{frm}", "to_user_id": f"u_{to}", "amount": amount,
          "note": note, "visibility": visibility}
     if created_at is not None:
-        p["created_at"] = created_at if isinstance(created_at, str) else at(created_at)
+        p["created_at"] = at(created_at) if isinstance(created_at, datetime) else created_at
     return p
 
 

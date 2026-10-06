@@ -234,7 +234,9 @@ def test_overdraft_through_a_hold(make_world):
     w = make_world(fixture2(users=[user("ada", 10000), user("bob", 0), user("cy", 0),
                                    user("dan", 600)]))
     p = ok(w.ada.pay("bob", 1000), 201)
+    time.sleep(0.02)                                  # distinct instants (D3-4)
     ok(authorize(w.bob, "cy", 800), 201)
+    time.sleep(0.02)
     ok(w.dan.pay("bob", 600), 201)
     err(correct(w.ada, p["payment_id"], 1, 300, p["created_at"]), 409, "historical_overdraft")
     assert me(w.bob)["total"] == 1600 and me(w.bob)["held"] == 800

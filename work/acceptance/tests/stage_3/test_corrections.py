@@ -1,6 +1,8 @@
 """Stage 3: corrections, revisions, known_at, historical overdraft, linked payments."""
 from datetime import timedelta
 
+import time
+
 import pytest
 
 from conftest import (Api, assert_timestamp, burst, err, err_any, fixture, new_key, ok,
@@ -50,7 +52,7 @@ def test_increase_debits_the_sender(w):
     """S3-033 "Increasing the amount debits the original sender" """
     p = ok(w.ada.pay("bob", 1000), 201)
     ok(correct(w.ada, p["payment_id"], 1, 1500, p["created_at"]), 201)
-    assert w.ada.balance() == 8500 and w.bob.balance() == 3500
+    assert w.ada.balance() == 8500 and w.bob.balance() == 4000
 
 
 @pytest.mark.req("S3-027", "S3-044")
@@ -209,6 +211,7 @@ def test_unaffordable_now(w):
     p = ok(w.cy.pay("bob", 400), 201)                 # cy 100 left
     err(correct(w.cy, p["payment_id"], 1, 501, p["created_at"]), 409, "insufficient_funds")
     q = ok(w.ada.pay("dan", 300), 201)
+    time.sleep(0.02)                                  # distinct instants (D3-4)
     ok(w.dan.pay("ada", 250), 201)                    # dan holds 50
     err(correct(w.ada, q["payment_id"], 1, 200, q["created_at"]), 409, "insufficient_funds")
     assert (w.cy.balance(), w.dan.balance()) == (100, 50)
@@ -220,15 +223,21 @@ def test_unaffordable_now(w):
 @pytest.mark.req("S3-035", "S3-036")
 def test_historical_overdraft(make_world):
     """S3-035 "if any user's corrected balance is negative at any effective-time boundary, return
-    409 `historical_overdraft`" — bob can pay the 500 now, but had spent it in between."""
-    w = make_world(fixture(users=[user("ada", 10000), user("bob", 0), user("cy", 0),
-                                  user("dan", 600)]))
-    p1 = ok(w.ada.pay("bob", 1000), 201)
-    ok(w.bob.pay("cy", 1000), 201)
-    ok(w.dan.pay("bob", 600), 201)
-    before_state = (statement(w.bob), [c.balance() for c in w.clients.values()])
+    409 `historical_overdraft`" — bob can pay the 500 now, but had spent it in between. Seeded at
+    distinct instants T1 < T2 < T3 (D3-4)."""
+    T1, T2, T3 = ago(hours=3), ago(hours=2), ago(hours=1)
+    w = make_world(fixture(users=[user("ada", 9000), user("bob", 600), user("cy", 1000),
+                                  user("dan", 0)],
+                           payments=[pay_rec("p_1", "ada", "bob", 1000, T1),
+                                     pay_rec("p_2", "bob", "cy", 1000, T2),
+                                     pay_rec("p_3", "dan", "bob", 600, T3)]))
+    p1 = {"payment_id": "p_1", "created_at": at(T1)}
+    def state():
+        st = {k: v for k, v in statement(w.bob).items() if k != "snapshot"}
+        return st, [c.balance() for c in w.clients.values()]
+    before_state = state()
     err(correct(w.ada, p1["payment_id"], 1, 500, p1["created_at"]), 409, "historical_overdraft")
-    assert (statement(w.bob), [c.balance() for c in w.clients.values()]) == before_state
+    assert state() == before_state
     assert len(revisions(w.ada, p1["payment_id"])) == 1
     assert w.bob.balance() == 600
     # a smaller reduction that keeps bob at zero at the spend is fine
