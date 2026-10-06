@@ -1,7 +1,7 @@
 // §2 limits on reset: 10 s for POST /_test/reset, 5 s for a request that overlaps it.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { REQUEST_LIMIT_MS, RESET_LIMIT_MS, call, fixture, user, useServer } from './helpers.js';
+import { RESET_LIMIT_MS, call, fixture, user, useServer } from './helpers.js';
 
 const srv = useServer();
 
@@ -18,7 +18,8 @@ test('R16: a 2000-user reset is fast, and a login during it is not held up', asy
   const resetMs = Date.now() - started;
   assert.equal(login.status, 200);
   assert.ok(resetMs < RESET_LIMIT_MS, `reset took ${resetMs} ms`);
-  assert.ok(loginMs < REQUEST_LIMIT_MS, `login took ${loginMs} ms`);
+  // Not held up: well inside the 5 s limit, and nowhere near the reset's own duration.
+  assert.ok(loginMs < 1_000, `login took ${loginMs} ms`);
   const late = await call(srv.base, 'POST', '/auth/login', { json: { email: 'u1998@example.com', password: 'correct horse' } });
   assert.equal(late.status, 200, 'every seeded user can log in');
   const wrong = await call(srv.base, 'POST', '/auth/login', { json: { email: 'u5@example.com', password: 'wrong horse' } });
