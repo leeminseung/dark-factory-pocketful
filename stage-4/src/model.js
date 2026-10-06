@@ -75,6 +75,11 @@ export const isImmutablePayment = (payment) => payment.authorizationId !== null 
  * member, which only an operator's correction batch covering the whole settlement may correct.
  */
 export const isLinkedPayment = (payment) => isImmutablePayment(payment) || payment.settlementId !== null;
+/**
+ * The refund cap (stage 4): the refunds of a payment total at most its current corrected amount.
+ * Refunds may not pass it, and a correction may not go below it.
+ */
+export const isWithinRefundCap = (refunded, amount) => refunded <= amount;
 /** The most payments one correction batch may correct (stage 4). */
 export const MAX_BATCH_CORRECTIONS = 32;
 /**

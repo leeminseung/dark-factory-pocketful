@@ -6,7 +6,7 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, closedKey, createdKey, effectiveKey, expiresKey, recordedKey, expiryOf, isAuthorizationStatus, isImmutablePayment, isIntegralNumber, isReason, MAX_BATCH_CORRECTIONS, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, closedKey, createdKey, effectiveKey, expiresKey, recordedKey, expiryOf, isAuthorizationStatus, isImmutablePayment, isIntegralNumber, isReason, isWithinRefundCap, MAX_BATCH_CORRECTIONS, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { compareKeys, instantKey, isFrac, parseInstant } from './clock.js';
@@ -281,7 +281,9 @@ function checkSnapshots(r, isUser) {
 /**
  * Refunds (stage 4): a refund names a payment that is not itself a refund, goes back from its
  * receiver to its sender with its note and visibility, links nothing else, is made no earlier than
- * it, and is never corrected. The refunds of a payment total at most its current amount.
+ * it, and is never corrected. The refund cap (model.js isWithinRefundCap) held at every step, as
+ * the live service applies it: replayed in recording order, each refund and each revision of a
+ * refunded payment leaves the refunds within the payment's amount at that point.
  */
 function checkRefunds(r) {
   const payments = new Map(r.payments.map((p) => [p.id, p]));
@@ -293,10 +295,21 @@ function checkRefunds(r) {
       && p.note === target.note && p.visibility === target.visibility
       && p.requestId === null && p.settlementId === null && p.authorizationId === null
       && createdKey(p) >= createdKey(target), `payment ${p.id} is not a refund of ${p.refundOf}`);
-    refunded.set(target.id, (refunded.get(target.id) ?? 0) + p.amount);
+    refunded.set(target.id, 0);
   }
-  for (const [id, total] of refunded) {
-    check(total <= currentRevision(payments.get(id)).amount, `payment ${id} is refunded beyond its current amount`);
+  // Every recording step that touches the cap, in recording order (checkRecordSequence: seq is unique).
+  const steps = [];
+  for (const p of r.payments) {
+    if (p.refundOf !== null) steps.push({ seq: p.revisions[0].seq, targetId: p.refundOf, refund: p.amount });
+    else if (refunded.has(p.id)) for (const rev of p.revisions) steps.push({ seq: rev.seq, targetId: p.id, amount: rev.amount });
+  }
+  steps.sort((a, b) => a.seq - b.seq);
+  const amount = new Map();
+  for (const step of steps) {
+    if (step.refund === undefined) amount.set(step.targetId, step.amount);
+    else refunded.set(step.targetId, refunded.get(step.targetId) + step.refund);
+    check(amount.has(step.targetId) && isWithinRefundCap(refunded.get(step.targetId), amount.get(step.targetId)),
+      `payment ${step.targetId} is refunded beyond its amount at recording number ${step.seq}`);
   }
 }
 

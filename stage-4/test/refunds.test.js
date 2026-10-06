@@ -187,3 +187,31 @@ test('S4 refunds: refunds and their receipts survive export and import; a stage-
   assert.equal((await fresh.ada.get('/activity')).body.payments[0].refund_of, null);
   assert.equal((await refund(fresh.bob, plain, 100)).status, 201);
 });
+
+test('R1 S4-014: an export that records a correction below the refunds after them is 422, checked in recording order', async () => {
+  const w = await world(srv.base);
+  const p = await pay(w.ada, 'bob', 1_000);
+  const correct = async (amount, expected) => assert.equal((await w.ada.post(`/payments/${p.payment_id}/corrections`, {
+    expected_revision: expected, amount, effective_at: p.created_at, reason: 'fix',
+  }, newKey())).status, 201);
+  await correct(300, 1);
+  await correct(1_000, 2);
+  assert.equal((await refund(w.bob, p, 800)).status, 201);
+  const exported = await exportState();
+  const s = exported.state;
+  // Move the refund before both corrections in recording order: it now precedes a revision of 300.
+  const [rev1, rev2, rev3] = s.payments.find((x) => x.id === p.payment_id).revisions;
+  const refundRow = s.payments.find((x) => x.refund_of === p.payment_id);
+  const t = rev2.recorded_at_ms;
+  const payments = s.payments.map((x) => {
+    if (x === refundRow) {
+      return { ...x, created_at_ms: t, revisions: [{ ...x.revisions[0], effective_at_ms: t, recorded_at_ms: t, seq: rev2.seq }] };
+    }
+    if (x.id !== p.payment_id) return x;
+    return { ...x, revisions: [rev1, { ...rev2, seq: rev2.seq + 1 }, { ...rev3, seq: rev3.seq + 1 }] };
+  });
+  const edited = { ...exported, state: { ...s, payments, idempotency: [] } };
+  expectError(await importState(edited), 422, 'validation_failed', 'a correction to 300 after 800 was refunded');
+  const unedited = { ...exported, state: { ...s, idempotency: [] } };
+  assert.equal((await importState(unedited)).status, 204, 'the same export in its real order imports');
+});

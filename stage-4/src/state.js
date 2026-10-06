@@ -18,7 +18,7 @@ import {
 } from './errors.js';
 import { currentRevision, firstOverdraft } from './ledger.js';
 import {
-  DEFAULT_AUTHORIZATION_TTL_SECONDS, MAX_CLOCK_MS, TERMINAL_STATUSES, expiryOf, isDue, remainingOf,
+  DEFAULT_AUTHORIZATION_TTL_SECONDS, MAX_CLOCK_MS, TERMINAL_STATUSES, expiryOf, isDue, isWithinRefundCap, remainingOf,
 } from './model.js';
 
 export class State {
@@ -295,7 +295,7 @@ export class State {
    * refund_exceeds_payment when `refunded` (the refunds so far plus any new one) is above `amount`.
    */
   requireRefundsWithin(refunded, amount) {
-    if (refunded > amount) throw refundExceedsPayment();
+    if (!isWithinRefundCap(refunded, amount)) throw refundExceedsPayment();
   }
 
   /**
