@@ -29,7 +29,7 @@ export function exportState(state) {
     payments: state.payments.map((p) => ({
       id: p.id, from_user_id: p.fromUserId, to_user_id: p.toUserId, amount: p.amount,
       note: p.note, visibility: p.visibility, request_id: p.requestId,
-      settlement_id: p.settlementId, authorization_id: p.authorizationId, created_at_ms: p.createdAt,
+      settlement_id: p.settlementId, authorization_id: p.authorizationId, refund_of: p.refundOf, created_at_ms: p.createdAt,
       created_at_frac: p.createdFrac,
       revisions: p.revisions.map((rev) => ({
         revision: rev.revision, amount: rev.amount, effective_at_ms: rev.effectiveAt, effective_at_frac: rev.effectiveFrac,
@@ -81,6 +81,14 @@ function hasStage3Field(state) {
   return has(state, 'snapshots') || some('users', (u) => has(u, 'opening_balance')) || some('payments', (p) => has(p, 'revisions'))
     || some('authorizations', (a) => has(a, 'closed_at_ms'))
     || some('idempotency', (rec) => typeof rec.scope === 'string' && rec.scope.includes('/corrections"'));
+}
+
+/** True when `state` has any field stage 4 added: refund_of, or a refund receipt. */
+function hasStage4Field(state) {
+  const payments = Array.isArray(state.payments) ? state.payments.filter(isPlainObject) : [];
+  const records = Array.isArray(state.idempotency) ? state.idempotency.filter(isPlainObject) : [];
+  return payments.some((p) => has(p, 'refund_of'))
+    || records.some((rec) => typeof rec.scope === 'string' && rec.scope.includes('/refunds"'));
 }
 
 /** True when `state` has none of the fields stage 2 added. */
@@ -136,7 +144,10 @@ export function importState(envelope) {
   // Likewise a stage-3 export carries every stage-3 field; an export with none is a stage-1 or
   // stage-2 export, whose payments are all still revision 1 and whose opening balances follow
   // from its balances (stage 3 "must accept exports produced by ... stage-1 or stage-2").
-  const fromStage3 = hasStage3Field(s);
+  // A stage-4 export carries refund_of on every payment; one without it (and no refund receipt)
+  // is from stage 1 to 3, which had no refunds.
+  const fromStage4 = hasStage4Field(s);
+  const fromStage3 = fromStage4 || hasStage3Field(s);
   const fromStage1 = !fromStage3 && isStage1State(s);
   const records = {
     currency: s.currency,
@@ -153,6 +164,7 @@ export function importState(envelope) {
       id: p.id, fromUserId: p.from_user_id, toUserId: p.to_user_id, amount: p.amount,
       note: p.note, visibility: p.visibility, requestId: p.request_id,
       settlementId: p.settlement_id, authorizationId: fromStage1 ? null : p.authorization_id,
+      refundOf: fromStage4 ? p.refund_of : null,
       createdAt: p.created_at_ms,
       createdFrac: fracOf(p.created_at_frac),
       revisions: fromStage3 ? revisionsOf(p.revisions) : [{

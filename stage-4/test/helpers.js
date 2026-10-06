@@ -75,9 +75,15 @@ export function client(base, token) {
   };
 }
 
-/** An export as the stage-2 service wrote it: without the fields stage 3 added. */
+/** An export as the stage-3 service wrote it: without the fields stage 4 added. */
+export function asStage3Export(envelope) {
+  const s = envelope.state;
+  return { ...envelope, state: { ...s, payments: s.payments.map(({ refund_of, ...p }) => p) } };
+}
+
+/** An export as the stage-2 service wrote it: without the fields stages 3 and 4 added. */
 export function asStage2Export(envelope) {
-  const { snapshots, ...s } = envelope.state;
+  const { snapshots, ...s } = asStage3Export(envelope).state;
   return {
     ...envelope,
     state: {

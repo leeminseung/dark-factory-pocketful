@@ -14,6 +14,7 @@ import { activity, createPayment } from './handlers/payments.js';
 import {
   cancelRequest, createRequest, declineRequest, listRequests, payRequest,
 } from './handlers/requests.js';
+import { createRefund } from './handlers/refunds.js';
 import { createSettlement } from './handlers/settlements.js';
 import { createSplit } from './handlers/splits.js';
 import { exportSnapshot, health, importSnapshot, reset } from './handlers/testControl.js';
@@ -48,6 +49,7 @@ export const routes = defineRoutes([
     auth: true, idempotent: true,
   },
   { method: 'GET', path: '/payments/:id/revisions', handler: listRevisions, auth: true },
+  { method: 'POST', path: '/payments/:id/refunds', handler: createRefund, auth: true, idempotent: true },
   { method: 'POST', path: '/requests', handler: createRequest, auth: true, idempotent: true },
   { method: 'GET', path: '/requests', handler: listRequests, auth: true },
   { method: 'POST', path: '/requests/:id/pay', handler: payRequest, auth: true, idempotent: true },

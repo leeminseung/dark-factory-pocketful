@@ -72,6 +72,7 @@ function readPayment(raw, where, resetAt) {
     requestId: null,
     settlementId: null,
     authorizationId: null,
+    refundOf: null,
     createdAt: created.ms,
     createdFrac: created.frac,
     revisions: [{

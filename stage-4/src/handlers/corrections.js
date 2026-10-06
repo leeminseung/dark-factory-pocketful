@@ -22,14 +22,26 @@ function correctionTerms(body, now) {
   return { expected, amount, effectiveAt: effective.ms, effectiveFrac: effective.frac, reason };
 }
 
+/**
+ * What one correction must satisfy of its payment, after the caller's permission: it is not a
+ * payment this correction may not touch (422 linked_payment_immutable), `expected` is its current
+ * revision (409 stale_revision), and the new amount still covers what was refunded of it
+ * (422 refund_exceeds_payment, stage 4).
+ */
+function checkAgainstPayment(state, payment, terms, isImmutable) {
+  if (isImmutable(payment)) throw linkedPaymentImmutable();
+  if (terms.expected !== currentRevision(payment).revision) throw staleRevision();
+  state.requireRefundsWithin(state.refundedOf(payment), terms.amount);
+}
+
 /** Idempotent: only the original sender corrects; returns the 201 body, the new revision. */
 export function createCorrection({ state, user, body, params, now }) {
   const terms = correctionTerms(body, now);
   const payment = state.paymentsById.get(params.id);
   if (!payment) throw notFound('no such payment');
   if (payment.fromUserId !== user.id) throw forbidden('only the payment\'s sender may correct it');
-  if (isLinkedPayment(payment)) throw linkedPaymentImmutable();
-  if (terms.expected !== currentRevision(payment).revision) throw staleRevision();
+  // Settlement members, captures and refunds are out of reach of a single correction.
+  checkAgainstPayment(state, payment, terms, isLinkedPayment);
   const [revision] = state.correctPayments([{ payment, ...terms }]);
   return revisionView(payment, revision);
 }

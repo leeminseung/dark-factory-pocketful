@@ -18,6 +18,7 @@ export function paymentView(state, payment) {
     request_id: payment.requestId,
     settlement_id: payment.settlementId,
     authorization_id: payment.authorizationId,
+    refund_of: payment.refundOf,
     created_at: formatTimestamp(payment.createdAt, payment.createdFrac),
   };
 }

@@ -14,7 +14,7 @@
 import { randomBytes } from 'node:crypto';
 import {
   authorizationExpired, authorizationNotOpen, captureExceedsAuthorization, historicalOverdraft,
-  insufficientFunds, requestNotPending,
+  insufficientFunds, refundExceedsPayment, requestNotPending,
 } from './errors.js';
 import { currentRevision, firstOverdraft } from './ledger.js';
 import {
@@ -42,6 +42,7 @@ export class State {
     this.openAuthorizations = new Set(); // the authorizations that hold funds
     this.idempotency = new Map(); // scope -> { fingerprint, response }
     this.snapshots = new Map(); // statement snapshot token -> frozen statement (stage 3; until reset)
+    this.refundedBy = new Map(); // payment id -> total refunded of it (stage 4; follows the payments)
     this.lastTimestampMs = 0;
     this.timestampFloorMs = 0; // the earliest the next record may be stamped (see nextTimestamp)
     this.paymentSequence = 0; // payments created so far through the API; orders their ids
@@ -174,7 +175,7 @@ export class State {
    * so no wallet passes through a negative value. No wallet can exceed 2^53: balances are
    * never negative and the fixture's total is capped there (fixture.js).
    */
-  movePayments(transfers, { requestId = null, settlementId = null, authorizationId = null, createdAt }) {
+  movePayments(transfers, { requestId = null, settlementId = null, authorizationId = null, refundOf = null, createdAt }) {
     const net = new Map();
     for (const t of transfers) {
       net.set(t.fromUserId, (net.get(t.fromUserId) ?? 0) - t.amount);
@@ -192,6 +193,7 @@ export class State {
         requestId,
         settlementId,
         authorizationId,
+        refundOf,
         createdAt,
         createdFrac: '', // the service stamps whole milliseconds (clock.js)
         // Stage 3: revision 1 is the payment as made; corrections append later revisions.
@@ -274,6 +276,38 @@ export class State {
       if (firstOverdraft(this, userId) !== null) throw historicalOverdraft();
     }
     return revisions;
+  }
+
+  // ---- refunds (stage 4) -------------------------------------------------
+
+  /** What has been refunded of `payment` so far. */
+  refundedOf(payment) {
+    return this.refundedBy.get(payment.id) ?? 0;
+  }
+
+  /**
+   * Refunds stay within the payment's current corrected amount (stage 4): refused with
+   * refund_exceeds_payment when `refunded` (the refunds so far plus any new one) is above `amount`.
+   */
+  requireRefundsWithin(refunded, amount) {
+    if (refunded > amount) throw refundExceedsPayment();
+  }
+
+  /**
+   * Refunds `amount` of `target` (the caller is its receiver; it is not a refund): a new payment
+   * back from receiver to sender, from the receiver's available funds, linked by refund_of, with
+   * the target's note and visibility. It reopens nothing and joins no settlement.
+   */
+  refundPayment(target, amount) {
+    this.requireRefundsWithin(this.refundedOf(target) + amount, currentRevision(target).amount);
+    const [refund] = this.movePayments([{
+      fromUserId: target.toUserId,
+      toUserId: target.fromUserId,
+      amount,
+      note: target.note,
+      visibility: target.visibility,
+    }], { refundOf: target.id, createdAt: this.nextTimestamp() });
+    return refund;
   }
 
   // ---- holds and authorizations ----------------------------------------
@@ -389,6 +423,7 @@ export class State {
     });
   }
 
+  /** Adds a payment, keeping the refund totals in step with it. */
   addPayment(payment) {
     this.payments.push(payment);
     this.paymentsById.set(payment.id, payment);
@@ -396,6 +431,11 @@ export class State {
       this.payments.pop();
       this.paymentsById.delete(payment.id);
     });
+    if (payment.refundOf !== null) {
+      const before = this.refundedBy.get(payment.refundOf);
+      this.refundedBy.set(payment.refundOf, (before ?? 0) + payment.amount);
+      this.remember(() => (before === undefined ? this.refundedBy.delete(payment.refundOf) : this.refundedBy.set(payment.refundOf, before)));
+    }
   }
 
   addRequest(request) {

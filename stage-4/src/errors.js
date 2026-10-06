@@ -38,5 +38,9 @@ export const staleRevision = () =>
 export const historicalOverdraft = () =>
   new ApiError(409, 'historical_overdraft', 'the correction would make a balance negative at some point in the past');
 export const linkedPaymentImmutable = () =>
-  new ApiError(422, 'linked_payment_immutable', 'settlement members and captures cannot be corrected');
+  new ApiError(422, 'linked_payment_immutable', 'this payment cannot be corrected here');
+export const refundExceedsPayment = () =>
+  new ApiError(422, 'refund_exceeds_payment', 'refunds would exceed the payment\'s current amount');
+export const invalidRefundTarget = () =>
+  new ApiError(422, 'invalid_refund_target', 'a refund cannot be refunded');
 export const selfRequest = () => new ApiError(422, 'self_request', 'cannot request from yourself');

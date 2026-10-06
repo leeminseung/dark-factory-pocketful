@@ -275,7 +275,7 @@ test('R15 S3 "Existing snapshots remain unchanged": an edited export cannot add 
   const t = s.last_timestamp_ms;
   const added = {
     id: 'p_added', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 1, note: '', visibility: 'public',
-    request_id: null, settlement_id: null, authorization_id: null, created_at_ms: t,
+    request_id: null, settlement_id: null, authorization_id: null, refund_of: null, created_at_ms: t,
     revisions: [{ revision: 1, amount: 1, effective_at_ms: t, recorded_at_ms: t, reason: '', seq: s.record_sequence + 1 }],
   };
   const users = s.users.map((u) => ({ ...u, balance: u.balance + (u.id === 'u_ada' ? -1 : u.id === 'u_bob' ? 1 : 0) }));

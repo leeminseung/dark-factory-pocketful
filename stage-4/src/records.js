@@ -6,7 +6,7 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, closedKey, createdKey, effectiveKey, expiresKey, recordedKey, expiryOf, isAuthorizationStatus, isIntegralNumber, isLinkedPayment, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, closedKey, createdKey, effectiveKey, expiresKey, recordedKey, expiryOf, isAuthorizationStatus, isImmutablePayment, isIntegralNumber, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { compareKeys, instantKey, isFrac, parseInstant } from './clock.js';
@@ -27,9 +27,10 @@ import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
  *   tokens:       [{ token, userId }]
  *   authorizationTtlSeconds
  *   payments:     { id, fromUserId, toUserId, amount, note, visibility, requestId, settlementId,
- *                   authorizationId, createdAt, createdFrac,
+ *                   authorizationId, refundOf, createdAt, createdFrac,
  *                   revisions: [{ revision, amount, effectiveAt, effectiveFrac, recordedAt, recordedFrac, reason, seq }] }
  *                 (amount is the original amount, revision 1; stage 3)
+ *                 (refundOf: the payment a refund refunds, else null; stage 4)
  *                 (each …Frac: the time's digits beyond the millisecond, clock.js; stage 3 R14)
  *   requests:     { id, requesterId, payerId, amount, note, status, paymentId, seeded, createdAt }
  *                 (seeded: came from a fixture, which may say `paid` without naming a payment)
@@ -87,7 +88,7 @@ export function checkRecords(r) {
     check(isRecordAmount(p.amount), `${at}.amount is out of range`);
     check(isNote(p.note), `${at}.note is invalid`);
     check(isVisibility(p.visibility), `${at}.visibility is invalid`);
-    check(isOptionalId(p.requestId) && isOptionalId(p.settlementId) && isOptionalId(p.authorizationId),
+    check(isOptionalId(p.requestId) && isOptionalId(p.settlementId) && isOptionalId(p.authorizationId) && isOptionalId(p.refundOf),
       `${at} links are invalid`);
     check(isTimestampMs(p.createdAt) && isFrac(p.createdFrac), `${at} timestamp is invalid`);
     checkRevisions(p, at);
@@ -154,6 +155,7 @@ export function checkRecords(r) {
   checkRecordSequence(r);
   checkLedger(r);
   checkLinks(r);
+  checkRefunds(r);
   checkHolds(r);
   checkHistory(r);
   checkSnapshots(r, isUser);
@@ -181,8 +183,8 @@ function checkRevisions(p, at) {
   const [first] = revs;
   check(first.amount === p.amount && effectiveKey(first) === createdKey(p) && recordedKey(first) === createdKey(p),
     `${at}.revisions[0] is not the payment as made`);
-  check(revs.length === 1 || !isLinkedPayment(p),
-    `${at} is a linked payment and cannot have corrections`);
+  check(revs.length === 1 || (!isImmutablePayment(p) && p.settlementId === null),
+    `${at} is a settlement member, capture or refund and cannot have corrections`);
 }
 
 /**
@@ -267,6 +269,28 @@ function checkSnapshots(r, isUser) {
       `${at} known_at echo is invalid`);
   });
   requireUnique(r.snapshots.map((sn) => sn.token), 'snapshot token');
+}
+
+/**
+ * Refunds (stage 4): a refund names a payment that is not itself a refund, goes back from its
+ * receiver to its sender with its note and visibility, links nothing else, is made no earlier than
+ * it, and is never corrected. The refunds of a payment total at most its current amount.
+ */
+function checkRefunds(r) {
+  const payments = new Map(r.payments.map((p) => [p.id, p]));
+  const refunded = new Map();
+  for (const p of r.payments) {
+    if (p.refundOf === null) continue;
+    const target = payments.get(p.refundOf);
+    check(target && target.refundOf === null && p.fromUserId === target.toUserId && p.toUserId === target.fromUserId
+      && p.note === target.note && p.visibility === target.visibility
+      && p.requestId === null && p.settlementId === null && p.authorizationId === null
+      && createdKey(p) >= createdKey(target), `payment ${p.id} is not a refund of ${p.refundOf}`);
+    refunded.set(target.id, (refunded.get(target.id) ?? 0) + p.amount);
+  }
+  for (const [id, total] of refunded) {
+    check(total <= currentRevision(payments.get(id)).amount, `payment ${id} is refunded beyond its current amount`);
+  }
 }
 
 /** Each wallet's balance is its opening balance plus its payments at their latest revisions. */
@@ -468,11 +492,11 @@ export function stateFromRecords(r) {
  */
 
 /** Fields a receipt from an earlier stage lacks; one that lacks such a field matches when it is null. */
-const LATER_FIELDS = new Set(['authorization_id', 'closed_at']);
+const LATER_FIELDS = new Set(['authorization_id', 'closed_at', 'refund_of']);
 
 /**
- * Stage-1 receipts predate authorization_id, stage-2 ones closed_at; a receipt that lacks either
- * matches when the record's value is null. Everything else must be equal as a JSON value.
+ * Stage-1 receipts predate authorization_id, stage-2 ones closed_at, stage-3 ones refund_of; a
+ * receipt that lacks such a field matches when the record's value is null. Everything else must be equal as a JSON value.
  */
 function sameReceipt(stored, expected) {
   const strip = (exp, got) => {
@@ -494,7 +518,7 @@ const REPLAY_RULES = {
   '/payments': ({ userId, body, receipt, records, view }) => {
     const p = records.payments.get(receipt.payment_id);
     return Boolean(p) && p.fromUserId === userId && p.requestId === null && p.settlementId === null
-      && p.authorizationId === null && body.amount === p.amount
+      && p.authorizationId === null && p.refundOf === null && body.amount === p.amount
       && records.users.get(p.toUserId).handle === body.to_handle
       && sameReceipt(receipt, view.payment(p));
   },
@@ -530,6 +554,11 @@ const REPLAY_RULES = {
       && body.expected_revision === rev.revision - 1 && body.amount === rev.amount
       && sameInstant(parseInstant(body.effective_at), rev.effectiveAt, rev.effectiveFrac) && body.reason === rev.reason
       && sameReceipt(receipt, revisionView(p, rev));
+  },
+  '/payments/:id/refunds': ({ userId, params, body, receipt, records, view }) => {
+    const p = records.payments.get(receipt.payment_id);
+    return Boolean(p) && p.refundOf === params.id && p.fromUserId === userId && body.amount === p.amount
+      && sameReceipt(receipt, view.payment(p));
   },
   '/authorizations': ({ userId, body, receipt, records, view }) => {
     const a = records.authorizations.get(receipt.authorization_id);
