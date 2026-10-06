@@ -172,14 +172,19 @@ export function renderWallet(ctx, main) {
       const direction = p.to_handle === mine ? 'received' : p.from_handle === mine ? 'sent' : 'between';
       const other = direction === 'received' ? p.from_handle : p.to_handle;
       const who = (handle) => handleText(handle, handle === mine ? 'self' : '');
+      // A refund (stage 4) says so, so it never reads as a fresh payment with the same note (design.md §5.3).
+      const isRefund = p.refund_of !== null && p.refund_of !== undefined;
+      const said = isRefund
+        ? { received: 'Refund received', sent: 'Refund sent', between: 'Refund' }
+        : { received: 'Received', sent: 'Sent', between: 'Between others' };
       return h('li', { class: 'row', testid: `activity-item-${p.payment_id}`, data: { visibility: p.visibility } },
-        plate(other, direction),
+        plate(other, isRefund ? 'returnArrow' : direction),
         h('div', { class: 'row-main' },
           h('div', { class: 'row-head' },
             h('p', { class: 'row-title', testid: `activity-parties-${p.payment_id}` }, who(p.from_handle), ' paid ', who(p.to_handle)),
             h('p', { class: 'row-amount', testid: `activity-amount-${p.payment_id}` }, fmt(p.amount))),
           h('p', { class: 'meta row-meta' },
-            h('span', {}, { received: 'Received', sent: 'Sent', between: 'Between others' }[direction]),
+            h('span', {}, said[direction]),
             timeEl(p.created_at), privacy(p.visibility)),
           h('p', { class: 'row-note', testid: `activity-note-${p.payment_id}` }, p.note)));
     })));

@@ -84,7 +84,7 @@ export const privacy = (visibility) => (visibility === 'private'
 /** The 40 px avatar plate: the other party's first two handle characters and a direction glyph. */
 export const plate = (handle, direction, { held = false } = {}) => h('span', {
   class: `plate${held ? ' plate-held' : ''}`, 'aria-hidden': 'true',
-}, handle.slice(0, 2).toUpperCase(), direction && h('span', { class: 'plate-glyph' }, icon(direction)));
+}, handle.slice(0, 2).toUpperCase(), direction && h('span', { class: 'plate-glyph', data: { glyph: direction } }, icon(direction)));
 
 /** A plum strip's loading state: "Loading…" at the height its figures will have (design.md §4). */
 export const stripLoading = () => [

@@ -25,6 +25,7 @@ for _ in range(100):
         time.sleep(0.05)
 S = lambda t: f"[data-testid='{t}']"
 results = {}
+REFUND = {}
 
 
 def call(m, path, body=None, token=None, key=None):
@@ -49,7 +50,9 @@ def seed():
                             "visibility": "public", "status": "open", "expires_at": soon}]})
     g = call('POST', '/auth/login', {"email": "grace_okafor_lindqvi@example.com", "password": "correct horse"})['token']
     l = call('POST', '/auth/login', {"email": "l1_0o@example.com", "password": "correct horse"})['token']
-    call('POST', '/payments', {"to_handle": "l1_0o", "amount": 100}, g, 'p1')
+    p1 = call('POST', '/payments', {"to_handle": "l1_0o", "amount": 100}, g, 'p1')
+    REFUND['id'] = call('POST', f"/payments/{p1['payment_id']}/refunds", {"amount": 30}, l, 'f1')['payment_id']
+    REFUND['of'] = p1['payment_id']
     call('POST', '/requests', {"payer_handle": "grace_okafor_lindqvi", "amount": 100, "note": ""}, l, 'r1')
     call('POST', '/requests', {"payer_handle": "l1_0o", "amount": 100, "note": ""}, g, 'r2')
     v = call('POST', '/authorizations', {"to_handle": "l1_0o", "amount": 50}, g, 'a2')
@@ -93,6 +96,12 @@ try:
       centers = pg.evaluate("""(() => { const c = (e) => { const g = document.createRange(); g.selectNodeContents(e); const r = [...g.getClientRects()].pop(); return r.bottom; };
           return [c(document.querySelector('.held-line dt')), c(document.querySelector('[data-testid=wallet-held]'))]; })()""")
       check('D12 wallet-held level with its label', abs(centers[0] - centers[1]) <= 3, f'label/amount text bottoms {centers}')
+      # D13: a refund row says so in its meta line and carries the return-arrow glyph (design.md §5.3)
+      rows = pg.evaluate("""(ids) => ids.map((id) => { const row = document.querySelector(`[data-testid=activity-item-${id}]`);
+          return [row.querySelector('.row-meta span').textContent, row.querySelector('.plate-glyph').dataset.glyph,
+                  document.querySelector(`[data-testid=activity-parties-${id}]`).textContent]; })""", [REFUND['id'], REFUND['of']])
+      check('D13 refund row reads as a refund', rows[0][:2] == ['Refund received', 'returnArrow'] and rows[1][:2] == ['Sent', 'sent']
+            and rows[0][2] == 'l1_0o paid grace_okafor_lindqvi', str(rows))
       # D8: one icon while refreshing: put the button in its busy state and count what shows
       icons = pg.evaluate("""(() => { const b = document.querySelector('[data-testid=wallet-refresh]'); b.classList.add('is-busy');
           const n = [...b.querySelectorAll('.icon')].filter(e => getComputedStyle(e).display !== 'none').length; b.classList.remove('is-busy'); return n; })()""")
