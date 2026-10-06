@@ -26,6 +26,7 @@
 - Round 1: product 6a17d63, suite cc78f4d (1050/1050; work/reviews/acceptance-6a17d63.md). Screen regression review:
   no findings (work/reviews/design-6a17d63.md). Round-1 review work/reviews/review-6a17d63-round1.md (standards + spec
   briefs/raw present): R1, R2, R3 blocking; R4-R12 non-blocking. Count 0; reviewer blocking -> round 2; all sent.
+- Round 2 started: product e03c437 (stage-3 = 123af1b), suite cc78f4d; acceptance + probes of R1-R3, R6, R10.
 
 ## Rulings
 - Seeded payment `created_at: "not-a-time"` (stage-1 test test_fixture_fields_outside_the_format_are_ignored fails on
