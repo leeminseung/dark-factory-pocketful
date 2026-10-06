@@ -25,7 +25,12 @@ export function createPayment({ state, user, body }) {
 
 export function activity({ state, user, query }) {
   const page = paging(query);
-  const visible = state.payments.filter((p) => canSeePayment(p, user.id)).reverse();
+  // Newest first by created_at (stage 3: seeded payments may be older than their order in the
+  // fixture); creation order breaks ties, newest first.
+  const visible = state.payments.map((p, order) => ({ p, order }))
+    .filter(({ p }) => canSeePayment(p, user.id))
+    .sort((a, b) => b.p.createdAt - a.p.createdAt || b.order - a.order)
+    .map(({ p }) => p);
   const { items, hasMore } = paginate(visible, page);
   return { status: 200, body: { payments: items.map((p) => paymentView(state, p)), has_more: hasMore } };
 }

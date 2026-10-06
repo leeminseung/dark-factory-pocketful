@@ -9,7 +9,7 @@
 // Stage 2 holds: an open authorization reserves its remaining amount on the payer's wallet.
 // `available = total − held` must never be negative, so the two ways it can fall — money
 // leaving (movePayments) and a new hold (openAuthorization) — both check `availableOf`.
-// Authorization status changes go through `setAuthorizationStatus`, which keeps the set of
+// Authorization closes go through `closeAuthorization`, which keeps the set of
 // open (holding) authorizations exact; `expireDue` closes those whose time has come.
 import { randomBytes } from 'node:crypto';
 import {
@@ -157,6 +157,8 @@ export class State {
         settlementId,
         authorizationId,
         createdAt,
+        // Stage 3: revision 1 is the payment as made; corrections append later revisions.
+        revisions: [{ revision: 1, amount: t.amount, effectiveAt: createdAt, recordedAt: createdAt, reason: '' }],
       };
       this.addPayment(payment);
       return payment;
@@ -208,20 +210,24 @@ export class State {
   /** Closes every open authorization whose expires_at is at or before `now`, releasing its remainder. */
   expireDue(now) {
     for (const a of this.openAuthorizations) {
-      if (isDue(a, now)) this.setAuthorizationStatus(a, 'expired');
+      // Expiry takes effect at expires_at, whenever the sweep notices it (stage 3).
+      if (isDue(a, now)) this.closeAuthorization(a, 'expired', a.expiresAt);
     }
   }
 
-  /** The one place an authorization's status changes; keeps the set of holds in step. */
-  setAuthorizationStatus(authorization, status) {
-    const before = authorization.status;
+  /**
+   * The one place an authorization closes: captured, voided or expired, at `closedAt` (the
+   * event's time). Keeps the set of holds in step and records closed_at (stage 3).
+   */
+  closeAuthorization(authorization, status, closedAt) {
+    const before = { status: authorization.status, closedAt: authorization.closedAt };
     this.remember(() => {
-      authorization.status = before;
-      if (before === 'open') this.openAuthorizations.add(authorization);
+      Object.assign(authorization, before);
+      if (before.status === 'open') this.openAuthorizations.add(authorization);
     });
     authorization.status = status;
-    if (status === 'open') this.openAuthorizations.add(authorization);
-    else this.openAuthorizations.delete(authorization);
+    authorization.closedAt = closedAt;
+    this.openAuthorizations.delete(authorization);
   }
 
   /** Places a hold of `amount` on the payer; refused when it exceeds what they can spend. */
@@ -237,6 +243,7 @@ export class State {
       paymentIds: [],
       seeded: false,
       createdAt,
+      closedAt: null,
     };
     this.addAuthorization(authorization);
     return authorization;
@@ -260,9 +267,10 @@ export class State {
     if (captured > remaining) throw captureExceedsAuthorization();
     const before = { capturedAmount: authorization.capturedAmount, paymentIds: authorization.paymentIds };
     this.remember(() => Object.assign(authorization, before));
+    const at = this.nextTimestamp();
     authorization.capturedAmount += captured;
     authorization.paymentIds = [...authorization.paymentIds];
-    if (final || captured === remaining) this.setAuthorizationStatus(authorization, 'captured');
+    if (final || captured === remaining) this.closeAuthorization(authorization, 'captured', at);
     // The hold no longer covers the captured part, so the payer's available is unchanged by it.
     const [payment] = this.movePayments([{
       fromUserId: authorization.fromUserId,
@@ -270,7 +278,7 @@ export class State {
       amount: captured,
       note: authorization.note,
       visibility: authorization.visibility,
-    }], { authorizationId: authorization.id, createdAt: this.nextTimestamp() });
+    }], { authorizationId: authorization.id, createdAt: at });
     authorization.paymentIds.push(payment.id);
     return payment;
   }
@@ -279,7 +287,7 @@ export class State {
   voidAuthorization(authorization) {
     if (authorization.status === 'voided') return;
     if (authorization.status !== 'open') throw authorizationNotOpen();
-    this.setAuthorizationStatus(authorization, 'voided');
+    this.closeAuthorization(authorization, 'voided', this.nextTimestamp());
   }
 
   addAuthorization(authorization) {

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RFC3339 } from '../src/clock.js';
-import { call, fixture, newKey, useServer, world } from './helpers.js';
+import { asStage1Export, call, fixture, newKey, useServer, world } from './helpers.js';
 
 const srv = useServer();
 const expectError = (res, status, code, label) =>
@@ -252,8 +252,7 @@ test('a stage-1 export imports: tokens, balances, pending requests and lost-resp
   const key = newKey();
   const paid = (await w.ada.post('/payments', { to_handle: 'bob', amount: 300 }, key)).body;
   const stage2 = (await call(srv.base, 'GET', '/_test/export')).body;
-  const { authorization_ttl_seconds, authorizations, ...rest } = stage2.state;
-  const stage1 = { ...stage2, state: { ...rest, payments: rest.payments.map(({ authorization_id, ...p }) => p) } };
+  const stage1 = asStage1Export(stage2);
   await call(srv.base, 'POST', '/_test/reset', { json: fixture() });
   assert.equal((await call(srv.base, 'POST', '/_test/import', { json: stage1 })).status, 204);
   const m = await me(w.ada);

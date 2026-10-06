@@ -66,3 +66,23 @@ export function client(base, token) {
     balance: async () => (await call(base, 'GET', '/me', { token })).body.balance,
   };
 }
+
+/** An export as the stage-2 service wrote it: without the fields stage 3 added. */
+export function asStage2Export(envelope) {
+  const s = envelope.state;
+  return {
+    ...envelope,
+    state: {
+      ...s,
+      users: s.users.map(({ opening_balance, ...u }) => u),
+      payments: s.payments.map(({ revisions, ...p }) => p),
+      authorizations: s.authorizations.map(({ closed_at_ms, ...a }) => a),
+    },
+  };
+}
+
+/** An export as the stage-1 service wrote it: without the fields stages 2 and 3 added. */
+export function asStage1Export(envelope) {
+  const { authorization_ttl_seconds, authorizations, ...s } = asStage2Export(envelope).state;
+  return { ...envelope, state: { ...s, payments: s.payments.map(({ authorization_id, ...p }) => p) } };
+}

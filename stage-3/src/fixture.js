@@ -8,7 +8,7 @@ import { invalid, malformed } from './errors.js';
 import { hashSeededPasswords } from './passwords.js';
 import { parseTimestamp } from './clock.js';
 import { DEFAULT_AUTHORIZATION_TTL_SECONDS } from './model.js';
-import { checkRecords, stateFromRecords } from './records.js';
+import { checkRecords, openingBalances, stateFromRecords } from './records.js';
 import { isPlainObject } from './validate.js';
 
 const has = (obj, name) => Object.prototype.hasOwnProperty.call(obj, name);
@@ -47,18 +47,33 @@ const readUser = (raw, where) => ({
 });
 
 // The fixture format has no link fields (§4): seeded records start unlinked.
-const readPayment = (raw, where, createdAt) => ({
-  id: read(object(raw, where), 'id', 'string', where),
-  fromUserId: read(raw, 'from_user_id', 'string', where),
-  toUserId: read(raw, 'to_user_id', 'string', where),
-  amount: read(raw, 'amount', 'any', where),
-  note: read(raw, 'note', 'any', where, ''),
-  visibility: read(raw, 'visibility', 'any', where, 'public'),
-  requestId: null,
-  settlementId: null,
-  authorizationId: null,
-  createdAt,
-});
+/** An optional seeded time (stage 3): an RFC 3339 instant with an offset, defaulting to the reset time. */
+function readTime(raw, name, where, fallback) {
+  if (!has(raw, name)) return fallback;
+  const ms = parseTimestamp(read(raw, name, 'string', where));
+  if (ms === null) throw invalid(`${where}.${name} is not an RFC 3339 timestamp with an offset`);
+  return ms;
+}
+
+/** A seeded payment: created_at when supplied (never after the reset; checkRecords), else the reset time. */
+function readPayment(raw, where, resetAt) {
+  const createdAt = readTime(object(raw, where), 'created_at', where, resetAt);
+  const amount = read(raw, 'amount', 'any', where);
+  return {
+    id: read(raw, 'id', 'string', where),
+    fromUserId: read(raw, 'from_user_id', 'string', where),
+    toUserId: read(raw, 'to_user_id', 'string', where),
+    amount,
+    note: read(raw, 'note', 'any', where, ''),
+    visibility: read(raw, 'visibility', 'any', where, 'public'),
+    requestId: null,
+    settlementId: null,
+    authorizationId: null,
+    createdAt,
+    revisions: [{ revision: 1, amount, effectiveAt: createdAt, recordedAt: createdAt, reason: '' }],
+  };
+}
+
 
 const readRequest = (raw, where, createdAt) => ({
   id: read(object(raw, where), 'id', 'string', where),
@@ -73,7 +88,10 @@ const readRequest = (raw, where, createdAt) => ({
 });
 
 /** A seeded authorization holds from its own absolute expires_at; a seeded `captured` one counts as fully captured. */
-function readAuthorization(raw, where, createdAt) {
+function readAuthorization(raw, where, resetAt) {
+  // Seeded open holds start at the reset unless created_at is supplied (stage 3); closed ones
+  // keep no lifecycle and count as closed at their creation (or at expiry, if that came first).
+  const createdAt = readTime(object(raw, where), 'created_at', where, resetAt);
   const expiresAt = parseTimestamp(read(object(raw, where), 'expires_at', 'string', where));
   if (expiresAt === null) throw invalid(`${where}.expires_at is not an RFC 3339 timestamp with an offset`);
   const amount = read(raw, 'amount', 'any', where);
@@ -91,6 +109,7 @@ function readAuthorization(raw, where, createdAt) {
     paymentIds: [],
     seeded: true,
     createdAt,
+    closedAt: status === 'open' ? null : status === 'expired' ? Math.min(expiresAt, createdAt) : createdAt,
   };
 }
 
@@ -118,6 +137,7 @@ export function parseFixture(body) {
       .map((a, i) => readAuthorization(a, `authorizations[${i}]`, now)),
     idempotency: [],
   };
+  records.users = openingBalances(records.users, records.payments);
   checkRecords(records);
   return records;
 }

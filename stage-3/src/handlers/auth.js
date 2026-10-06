@@ -28,7 +28,7 @@ export async function signup({ state, body }) {
   checkAvailable(state, email, handle);
   const user = {
     id: state.newId('u', (id) => state.users.has(id)),
-    email, passwordHash, displayName, handle, balance: 0,
+    email, passwordHash, displayName, handle, balance: 0, openingBalance: 0, // new accounts open at zero
   };
   state.addUser(user);
   return { status: 201, body: sessionView(user, state.issueToken(user.id)) };

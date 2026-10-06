@@ -6,7 +6,7 @@
 // records is written once here, and a rejected input never touches the live state.
 import { invalid } from './errors.js';
 import {
-  charCount, expiryOf, isAuthorizationStatus, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
+  charCount, expiryOf, isAuthorizationStatus, isReason, isClockMs, isDue, remainingOf, isBalance, isEmail, isTtlSeconds, isHandle, isId, isMinorUnits, isNote, isRecordAmount, isRequestStatus,
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { authorizationView, paymentView, requestView, settlementView, splitView } from './views.js';
@@ -17,18 +17,21 @@ import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
 /*
  * Records (camelCase, as State holds them):
  *   currency, minorUnits, lastTimestampMs
- *   users:        { id, email, displayName, handle, balance }   (+ passwordHash once hashed)
+ *   users:        { id, email, displayName, handle, balance, openingBalance } (+ passwordHash once hashed)
+ *                 (openingBalance: what the wallet held before any payment moved; stage 3)
  *   operatorIds:  [userId]
  *   tokens:       [{ token, userId }]
  *   authorizationTtlSeconds
  *   payments:     { id, fromUserId, toUserId, amount, note, visibility, requestId, settlementId,
- *                   authorizationId, createdAt }
+ *                   authorizationId, createdAt,
+ *                   revisions: [{ revision, amount, effectiveAt, recordedAt, reason }] }
+ *                 (amount is the original amount, revision 1; stage 3)
  *   requests:     { id, requesterId, payerId, amount, note, status, paymentId, seeded, createdAt }
  *                 (seeded: came from a fixture, which may say `paid` without naming a payment)
  *   splits:       { id, requesterId, amount, note, shares: [{ handle, amount }], requestIds, createdAt }
  *   settlements:  { id, committedAt, paymentIds }
  *   authorizations: { id, fromUserId, toUserId, amount, capturedAmount, note, visibility, status,
- *                   expiresAt, paymentIds, seeded, createdAt }
+ *                   expiresAt, paymentIds, seeded, createdAt, closedAt }
  *                 (seeded: came from a fixture, whose `captured` ones name no payment)
  *   idempotency:  [{ scope, fingerprint, response }]
  */
@@ -57,6 +60,7 @@ export function checkRecords(r) {
     check(typeof u.displayName === 'string', `users[${i}].display_name must be a string`);
     check(isHandle(u.handle), `users[${i}].handle is not a valid handle`);
     check(isBalance(u.balance), `users[${i}].balance must be an integer from 0 to 2^53`);
+    check(isBalance(u.openingBalance), `users[${i}].opening balance must be an integer from 0 to 2^53`);
   });
   requireUnique(r.users.map((u) => u.id), 'user id');
   requireUnique(r.users.map((u) => u.email.toLowerCase()), 'email');
@@ -80,6 +84,7 @@ export function checkRecords(r) {
     check(isOptionalId(p.requestId) && isOptionalId(p.settlementId) && isOptionalId(p.authorizationId),
       `${at} links are invalid`);
     check(isTimestampMs(p.createdAt), `${at} timestamp is invalid`);
+    checkRevisions(p, at);
   });
   requireUnique(r.payments.map((p) => p.id), 'payment id');
 
@@ -133,13 +138,65 @@ export function checkRecords(r) {
     check(isTimestampMs(a.expiresAt) && isTimestampMs(a.createdAt), `${at} timestamps are invalid`);
     check(isList(a.paymentIds, (id) => paymentIds.has(id)), `${at}.payment_ids are invalid`);
     check(typeof a.seeded === 'boolean', `${at}.seeded must be a boolean`);
+    check(a.status === 'open' ? a.closedAt === null : isTimestampMs(a.closedAt), `${at}.closed_at is invalid`);
   });
   requireUnique(r.authorizations.map((a) => a.id), 'authorization id');
 
   checkTimes(r);
+  checkLedger(r);
   checkLinks(r);
   checkHolds(r);
   checkReplays(r);
+}
+
+/**
+ * A payment's revisions (stage 3): numbered 1, 2, … in order; revision 1 is the payment as made
+ * (its amount, effective and recorded at created_at, no reason); later ones are corrections with
+ * an amount 0..1000000000, a reason of 1..200 characters, an effective time not after their
+ * recorded time, and recorded times that strictly increase. Linked payments (settlement members
+ * and captures) cannot be corrected, so they have revision 1 only.
+ */
+function checkRevisions(p, at) {
+  const revs = p.revisions;
+  check(Array.isArray(revs) && revs.length >= 1 && revs.every(isPlainObject), `${at}.revisions are invalid`);
+  revs.forEach((rev, i) => {
+    check(rev.revision === i + 1, `${at}.revisions are not numbered in order`);
+    check(isRecordAmount(rev.amount) && isTimestampMs(rev.effectiveAt) && isTimestampMs(rev.recordedAt),
+      `${at}.revisions[${i}] fields are invalid`);
+    check(i === 0 ? rev.reason === '' : isReason(rev.reason), `${at}.revisions[${i}].reason is invalid`);
+    check(i === 0 || (rev.effectiveAt <= rev.recordedAt && rev.recordedAt > revs[i - 1].recordedAt),
+      `${at}.revisions[${i}] times are out of order`);
+  });
+  const [first] = revs;
+  check(first.amount === p.amount && first.effectiveAt === p.createdAt && first.recordedAt === p.createdAt,
+    `${at}.revisions[0] is not the payment as made`);
+  check(revs.length === 1 || (p.settlementId === null && p.authorizationId === null),
+    `${at} is a linked payment and cannot have corrections`);
+}
+
+/**
+ * Opening balances for records that do not carry them (a fixture, or a stage-1/2 export, where
+ * every payment is still its revision 1): the balance minus the net of every payment (stage 3).
+ */
+export function openingBalances(users, payments) {
+  const net = new Map(users.map((u) => [u.id, 0]));
+  for (const p of payments) {
+    if (!net.has(p.fromUserId) || !net.has(p.toUserId) || typeof p.amount !== 'number') continue; // judged by checkRecords
+    net.set(p.fromUserId, net.get(p.fromUserId) - p.amount);
+    net.set(p.toUserId, net.get(p.toUserId) + p.amount);
+  }
+  return users.map((u) => ({ ...u, openingBalance: typeof u.balance === 'number' ? u.balance - net.get(u.id) : u.balance }));
+}
+
+/** Each wallet's balance is its opening balance plus its payments at their latest revisions. */
+function checkLedger(r) {
+  const net = new Map(r.users.map((u) => [u.id, u.openingBalance]));
+  for (const p of r.payments) {
+    const amount = p.revisions.at(-1).amount;
+    net.set(p.fromUserId, net.get(p.fromUserId) - amount);
+    net.set(p.toUserId, net.get(p.toUserId) + amount);
+  }
+  for (const u of r.users) check(net.get(u.id) === u.balance, `${u.id} balance does not follow from its opening balance and payments`);
 }
 
 /**
@@ -152,7 +209,9 @@ function checkTimes(r) {
     ...r.payments.map((p) => p.createdAt), ...r.requests.map((q) => q.createdAt), ...r.splits.map((sp) => sp.createdAt),
     ...r.settlements.map((st) => st.committedAt), ...r.authorizations.map((a) => a.createdAt),
   ];
-  check(created.every((t) => t <= r.lastTimestampMs), 'a record was created after the clock');
+  const recorded = r.payments.flatMap((p) => p.revisions.map((rev) => rev.recordedAt));
+  const closed = r.authorizations.filter((a) => a.status === 'captured' || a.status === 'voided').map((a) => a.closedAt);
+  check([...created, ...recorded, ...closed].every((t) => t <= r.lastTimestampMs), 'a record was created after the clock');
   for (const a of r.authorizations) {
     check(a.seeded || a.expiresAt === expiryOf(a.createdAt, r.authorizationTtlSeconds),
       `authorization ${a.id} does not expire at created_at + authorization_ttl_seconds`);
@@ -252,6 +311,15 @@ function checkLinks(r) {
       `authorization ${a.id} captures do not match its payments`);
     check(a.status !== 'open' || a.capturedAmount < a.amount, `authorization ${a.id} is open with nothing left`);
     check(a.status !== 'captured' || unrecorded || captures.length > 0, `authorization ${a.id} is captured without a payment`);
+    // closed_at is the closing event's time (stage 3): expiry at expires_at, a final capture at its
+    // payment, a void after every capture. A fixture's closed one carries the reset time instead.
+    const lastCapture = captures.reduce((t, p) => Math.max(t, p.createdAt), a.createdAt);
+    const closedRight = a.status === 'open' || a.seeded || {
+      expired: a.closedAt === a.expiresAt,
+      captured: a.closedAt === lastCapture,
+      voided: a.closedAt >= lastCapture,
+    }[a.status];
+    check(closedRight, `authorization ${a.id} closed_at does not match how it closed`);
   }
   for (const st of r.settlements) {
     check(st.paymentIds.length > 0 && new Set(st.paymentIds).size === st.paymentIds.length
@@ -282,12 +350,12 @@ export function stateFromRecords(r) {
   for (const u of r.users) {
     state.addUser({
       id: u.id, email: u.email, passwordHash: u.passwordHash, displayName: u.displayName,
-      handle: u.handle, balance: u.balance,
+      handle: u.handle, balance: u.balance, openingBalance: u.openingBalance,
     });
   }
   for (const id of r.operatorIds) state.operatorIds.add(id);
   for (const { token, userId } of r.tokens) state.tokens.set(token, userId);
-  for (const payment of r.payments) state.addPayment({ ...payment });
+  for (const payment of r.payments) state.addPayment({ ...payment, revisions: payment.revisions.map((rev) => ({ ...rev })) });
   for (const request of r.requests) state.addRequest({ ...request });
   for (const split of r.splits) state.addSplit({ ...split });
   for (const a of r.authorizations) state.addAuthorization({ ...a, paymentIds: [...a.paymentIds] });

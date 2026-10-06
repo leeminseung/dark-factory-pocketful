@@ -65,6 +65,8 @@ export const isDue = (authorization, now) => authorization.expiresAt <= now;
 /** What an authorization still holds: amount − captured while open, zero once closed. */
 export const remainingOf = (authorization) =>
   (authorization.status === 'open' ? authorization.amount - authorization.capturedAmount : 0);
+/** A correction's reason (stage 3): a string of 1 to 200 characters. */
+export const isReason = (value) => typeof value === 'string' && charCount(value) >= 1 && charCount(value) <= MAX_NOTE_CHARS;
 export const isMinorUnits = (value) => MINOR_UNITS.includes(value);
 export const isTotalWithinLimit = (balances) =>
   balances.reduce((sum, balance) => sum + balance, 0) <= BALANCE_LIMIT;
