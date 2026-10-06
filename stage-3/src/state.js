@@ -126,6 +126,23 @@ export class State {
   // ---- the money gate ----------------------------------------------------
 
   /**
+   * The one place a balance changes: applies the net change per wallet, or refuses with
+   * insufficient_funds if any wallet's available would fall below zero. Balances are set once,
+   * from net totals, so no wallet passes through a negative value.
+   */
+  shiftBalances(net) {
+    for (const [userId, delta] of net) {
+      if (this.availableOf(userId) + delta < 0) throw insufficientFunds();
+    }
+    for (const [userId, delta] of net) {
+      const user = this.users.get(userId);
+      const before = user.balance;
+      this.remember(() => { user.balance = before; });
+      user.balance += delta;
+    }
+  }
+
+  /**
    * Records one payment per transfer and applies all of them, or none.
    * Fails with insufficient_funds when any wallet would end below zero after the
    * batch's incoming and outgoing transfers; balances are set once, from net totals,
@@ -138,15 +155,7 @@ export class State {
       net.set(t.fromUserId, (net.get(t.fromUserId) ?? 0) - t.amount);
       net.set(t.toUserId, (net.get(t.toUserId) ?? 0) + t.amount);
     }
-    for (const [userId, delta] of net) {
-      if (this.availableOf(userId) + delta < 0) throw insufficientFunds();
-    }
-    for (const [userId, delta] of net) {
-      const user = this.users.get(userId);
-      const before = user.balance;
-      this.remember(() => { user.balance = before; });
-      user.balance += delta;
-    }
+    this.shiftBalances(net);
     return transfers.map((t) => {
       const payment = {
         id: this.newId('p', (id) => this.paymentsById.has(id)),
@@ -208,8 +217,8 @@ export class State {
   correctPayment(payment, { amount, effectiveAt, reason }) {
     const previous = currentRevision(payment);
     const delta = amount - previous.amount;
-    const [payerId, payeeId] = delta >= 0 ? [payment.fromUserId, payment.toUserId] : [payment.toUserId, payment.fromUserId];
-    if (this.availableOf(payerId) < Math.abs(delta)) throw insufficientFunds();
+    // Checked before anything changes, so the refusal precedes the clock and revision updates.
+    this.shiftBalances(new Map([[payment.fromUserId, -delta], [payment.toUserId, delta]]));
     // Recorded times for one payment strictly increase, and the service clock follows.
     const recordedAt = Math.max(this.nextTimestamp(), previous.recordedAt + 1);
     const clockBefore = this.lastTimestampMs;
@@ -219,12 +228,6 @@ export class State {
     const revisionsBefore = payment.revisions;
     this.remember(() => { payment.revisions = revisionsBefore; });
     payment.revisions = [...payment.revisions, revision];
-    for (const [userId, change] of [[payerId, -Math.abs(delta)], [payeeId, Math.abs(delta)]]) {
-      const user = this.users.get(userId);
-      const before = user.balance;
-      this.remember(() => { user.balance = before; });
-      user.balance += change;
-    }
     for (const userId of [payment.fromUserId, payment.toUserId]) {
       if (firstOverdraft(this, userId) !== null) throw historicalOverdraft();
     }
