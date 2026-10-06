@@ -78,13 +78,14 @@ async function dispatch(req) {
   const state = store.current;
   // Expiry needs no request at the deadline: every request first closes what is due, so
   // all its reads and writes see the clock (stage 2 "Reads and writes must reflect expiry").
-  state.expireDue(Date.now());
+  const now = Math.max(Date.now(), state.lastTimestampMs); // the instant this request began
+  state.expireDue(now);
   const user = route.auth ? authenticate(state, req.headers.authorization) : null;
   if (route.operator && !state.isOperator(user.id)) throw forbidden('settlement operators only');
   const key = route.idempotent ? idempotencyKey(utf8Header(req.headers['idempotency-key'])) : null;
   const bodyAbsent = req.method !== 'POST' || (route.noBody && bytes.length === 0);
   const body = bodyAbsent ? {} : parseBody(bytes);
-  const context = { state, user, body, params, query: url.searchParams };
+  const context = { state, user, body, params, query: url.searchParams, now };
 
   // The endpoint is the matched route and its decoded parameters, not the raw spelling:
   // `/payments/` and `/requests/rq%5F1/pay` are the same paths as `/payments` and `/requests/rq_1/pay`.

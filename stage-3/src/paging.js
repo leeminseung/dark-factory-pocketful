@@ -1,4 +1,5 @@
 // List query parameters (§5, §8): limit/offset paging and enumerated filters.
+import { parseInstant } from './clock.js';
 import { invalid } from './errors.js';
 
 export const MAX_LIMIT = 200;
@@ -32,4 +33,17 @@ export function queryChoice(query, name, choices) {
 /** One page of `items` and whether more items follow it. */
 export function paginate(items, { limit, offset }) {
   return { items: items.slice(offset, offset + limit), hasMore: items.length > offset + limit };
+}
+
+/**
+ * An optional instant query parameter (stage 3 as_of, known_at, from, to): absent is null; present
+ * it must be an RFC 3339 instant with an offset — a naive time, a bare date or an empty value is 422.
+ * Returns { text, floor, ceil } (see clock.js parseInstant).
+ */
+export function queryInstant(query, name) {
+  const text = query.get(name);
+  if (text === null) return null;
+  const instant = parseInstant(text);
+  if (!instant) throw invalid(`${name} must be an RFC 3339 instant with an offset`);
+  return { text, ...instant };
 }

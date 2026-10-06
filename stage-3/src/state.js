@@ -40,6 +40,7 @@ export class State {
     this.authorizationsById = new Map();
     this.openAuthorizations = new Set(); // the authorizations that hold funds
     this.idempotency = new Map(); // scope -> { fingerprint, response }
+    this.snapshots = new Map(); // statement snapshot token -> frozen statement (stage 3; until reset)
     this.lastTimestampMs = 0;
     this.journal = null; // undo steps of the running transaction, newest last
   }
@@ -327,6 +328,13 @@ export class State {
   addSettlement(settlement) {
     this.settlements.set(settlement.id, settlement);
     this.remember(() => this.settlements.delete(settlement.id));
+  }
+
+  // ---- statement snapshots (stage 3) ------------------------------------
+
+  addSnapshot(token, snapshot) {
+    this.snapshots.set(token, snapshot);
+    this.remember(() => this.snapshots.delete(token));
   }
 
   // ---- idempotency records ---------------------------------------------

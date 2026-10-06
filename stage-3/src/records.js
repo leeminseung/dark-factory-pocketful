@@ -10,6 +10,7 @@ import {
   isTimestampMs, isTotalWithinLimit, isVisibility,
 } from './model.js';
 import { authorizationView, paymentView, requestView, settlementView, splitView } from './views.js';
+import { firstOverdraft } from './ledger.js';
 import { State } from './state.js';
 import { canonicalJson, parseJson } from './json.js';
 import { MAX_IDEMPOTENCY_KEY_CHARS, isPlainObject } from './validate.js';
@@ -146,6 +147,7 @@ export function checkRecords(r) {
   checkLedger(r);
   checkLinks(r);
   checkHolds(r);
+  checkHistory(r);
   checkReplays(r);
 }
 
@@ -186,6 +188,23 @@ export function openingBalances(users, payments) {
     net.set(p.toUserId, net.get(p.toUserId) + p.amount);
   }
   return users.map((u) => ({ ...u, openingBalance: typeof u.balance === 'number' ? u.balance - net.get(u.id) : u.balance }));
+}
+
+/**
+ * Every wallet's history is nonnegative (stage 3 "Seeded history is consistent and nonnegative"):
+ * under the latest revisions neither total nor available is below zero at any boundary.
+ */
+function checkHistory(r) {
+  const book = {
+    users: new Map(r.users.map((u) => [u.id, u])),
+    payments: r.payments,
+    paymentsById: new Map(r.payments.map((p) => [p.id, p])),
+    authorizations: r.authorizations,
+  };
+  for (const u of r.users) {
+    const overdraft = firstOverdraft(book, u.id);
+    check(overdraft === null, `${u.id} history has a negative ${overdraft?.what} balance`);
+  }
 }
 
 /** Each wallet's balance is its opening balance plus its payments at their latest revisions. */

@@ -4,7 +4,8 @@
 //   idempotent: an Idempotency-Key is required and the handler runs through §7 replay rules
 //   noBody:     the endpoint defines no request body: none or an empty one is fine, but a body
 //               that is sent must still parse as a JSON object (§5, ruling R3)
-import { login, me, signup } from './handlers/auth.js';
+import { login, signup } from './handlers/auth.js';
+import { me, statement } from './handlers/history.js';
 import {
   captureAuthorization, createAuthorization, listAuthorizations, voidAuthorization,
 } from './handlers/authorizations.js';
@@ -38,6 +39,7 @@ export const routes = defineRoutes([
   { method: 'POST', path: '/auth/signup', handler: signup },
   { method: 'POST', path: '/auth/login', handler: login },
   { method: 'GET', path: '/me', handler: me, auth: true },
+  { method: 'GET', path: '/statement', handler: statement, auth: true },
   { method: 'POST', path: '/payments', handler: createPayment, auth: true, idempotent: true },
   { method: 'GET', path: '/activity', handler: activity, auth: true },
   { method: 'POST', path: '/requests', handler: createRequest, auth: true, idempotent: true },

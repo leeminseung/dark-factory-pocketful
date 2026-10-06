@@ -4,7 +4,7 @@ import { hashPassword, needsUpgrade, verifyNothing, verifyPassword } from '../pa
 import { charCount, isEmail } from '../model.js';
 import { MIN_PASSWORD_CHARS, deriveHandle } from '../../public/assets/shared/rules.js';
 import { requiredString } from '../validate.js';
-import { meView, sessionView } from '../views.js';
+import { sessionView } from '../views.js';
 
 export { deriveHandle };
 
@@ -43,8 +43,4 @@ export async function login({ state, body }) {
   // A seeded hash may be below full strength (passwords.js); replace it now that we hold the password.
   if (needsUpgrade(user.passwordHash)) user.passwordHash = await hashPassword(password);
   return { status: 200, body: sessionView(user, state.issueToken(user.id)) };
-}
-
-export function me({ state, user }) {
-  return { status: 200, body: meView(state, user) };
 }

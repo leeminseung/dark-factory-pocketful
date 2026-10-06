@@ -25,3 +25,17 @@ export function parseTimestamp(text) {
     && Number(m[10] ?? 0) < 24 && Number(m[11] ?? 0) < 60;
   return isReal ? local - offsetMinutes * 60_000 : null;
 }
+
+/**
+ * A query instant (stage 3 as_of, known_at, from, to): an RFC 3339 instant with an offset, kept
+ * to sub-millisecond precision as the two whole milliseconds around it. `floor` serves inclusive
+ * bounds (a payment at or before the instant) and `ceil` half-open ones (at or after it), so a
+ * fraction beyond milliseconds is never rounded the wrong way. Null when it is not an instant.
+ */
+export function parseInstant(text) {
+  const floor = parseTimestamp(text);
+  if (floor === null) return null;
+  const fraction = RFC3339_PARTS.exec(text)[7] ?? '';
+  const beyondMs = /[1-9]/.test(fraction.slice(3));
+  return { floor, ceil: beyondMs ? floor + 1 : floor };
+}
