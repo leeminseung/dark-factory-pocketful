@@ -37,8 +37,17 @@
   folders) + R9-R12; rounds continue from 3 without reviewer, compared with 1.
 - Round 3 started: product eb6e37e (stage folders = 6ab31ff; stage-1..3 changed for R8), suite 16f6bb0 on all four
   folders; R8 probes incl. the operator-to-operator move gap.
+- Round 3: product eb6e37e, suite 16f6bb0 on all four folders (1143/1050/858/554, 0 failed); supplied --stage 4 isolated
+  2x pass; R8 probes: non-operator moves, cross-user copies and duplicate-key copies are 422 everywhere
+  (work/reviews/acceptance-eb6e37e.md). Operator-to-operator and same-user key moves import (ruled not a failure).
+  Failing ids 0 vs 1 -> re-review of eb6e37e.
 
 ## Rulings
+- Receipt moved between two operators, or to another key of the same user (round 3): not a failure. §10 refuses "an
+  invalid state"; the edited export describes a state the service itself could have produced (op2 executed it with key K),
+  and no record links a settlement, batch or payment to its initiating key or operator, so it is valid and must import.
+  A non-operator scope (impossible state) and two receipts naming one record (contradiction) are invalid and are 422 (R8).
+  Recorded as risk S4-RISK-1.
 - R6 (non-string payment_id in a batch -> 422): no change; D4-6 (accepted) allows 400 or 422 for wrong-type fields.
 - R5, R7 (duplicate-id and same-instant checks' position): no change required; the stated precedence orders item errors,
   completeness, funds and history only, and does not place batch-shape or member-instant validation.
