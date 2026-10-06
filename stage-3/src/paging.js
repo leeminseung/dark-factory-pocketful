@@ -38,7 +38,7 @@ export function paginate(items, { limit, offset }) {
 /**
  * An optional instant query parameter (stage 3 as_of, known_at, from, to): absent is null; present
  * it must be an RFC 3339 instant with an offset — a naive time, a bare date or an empty value is 422.
- * Returns { text, floor, ceil } (see clock.js parseInstant).
+ * Returns { text, ms } (see clock.js parseInstant).
  */
 export function queryInstant(query, name) {
   const text = query.get(name);

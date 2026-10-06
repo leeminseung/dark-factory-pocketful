@@ -7,7 +7,7 @@ export const RFC3339 =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
 // One rule for every instant the service reads (stage 3 R6): RFC 3339 §5.6 with an offset; the
-// "T" and "Z" may be lowercase.
+// "T" and "Z" may be lowercase. Fractions beyond the millisecond are dropped (R10).
 const RFC3339_PARTS =
   /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
 
@@ -29,15 +29,11 @@ export function parseTimestamp(text) {
 }
 
 /**
- * A query instant (stage 3 as_of, known_at, from, to): an RFC 3339 instant with an offset, kept
- * to sub-millisecond precision as the two whole milliseconds around it. `floor` serves inclusive
- * bounds (a payment at or before the instant) and `ceil` half-open ones (at or after it), so a
- * fraction beyond milliseconds is never rounded the wrong way. Null when it is not an instant.
+ * A query instant (stage 3 as_of, known_at, from, to): an RFC 3339 instant with an offset, at the
+ * millisecond resolution of every stored time. Stored and query instants are both truncated to the
+ * millisecond (R10), so one instant names one millisecond everywhere. Null when it is not an instant.
  */
 export function parseInstant(text) {
-  const floor = parseTimestamp(text);
-  if (floor === null) return null;
-  const fraction = RFC3339_PARTS.exec(text)[7] ?? '';
-  const beyondMs = /[1-9]/.test(fraction.slice(3));
-  return { floor, ceil: beyondMs ? floor + 1 : floor };
+  const ms = parseTimestamp(text);
+  return ms === null ? null : { ms };
 }

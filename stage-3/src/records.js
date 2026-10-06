@@ -230,7 +230,7 @@ function checkSnapshots(r, isUser) {
       `${at} window is invalid`);
     check(isTimestampMs(sn.knownAt) && sn.knownAt <= r.lastTimestampMs, `${at} watermark is invalid`);
     const echo = sn.knownAtText === null ? null : parseInstant(sn.knownAtText);
-    check(sn.knownAtText === null || (echo !== null && echo.floor >= sn.knownAt), `${at} known_at is invalid`);
+    check(sn.knownAtText === null || (echo !== null && echo.ms >= sn.knownAt), `${at} known_at is invalid`);
   });
   requireUnique(r.snapshots.map((sn) => sn.token), 'snapshot token');
 }

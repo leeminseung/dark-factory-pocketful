@@ -153,3 +153,28 @@ test('R3 S3 "Tokens last until reset": snapshots survive export and import, stil
     expectError(await call(srv.base, 'POST', '/_test/import', { json: envelope }), 422, 'validation_failed', label);
   }
 });
+
+test('R6: lowercase t and z are RFC 3339 too, for every instant the service reads', async () => {
+  const w = await world(srv.base, fixture({ payments: [
+    { id: 'p_lc', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 5, note: '', created_at: '2025-01-01t00:00:00z' },
+  ] }));
+  assert.equal((await w.ada.get(`/me${q({ as_of: '2025-01-01t00:00:00z' })}`)).status, 200);
+  const st = (await w.ada.get(`/statement${q({ from: '2025-01-01t00:00:00z', to: '2025-01-02t00:00:00z' })}`)).body;
+  assert.deepEqual(st.entries.map((e) => e.payment.payment_id), ['p_lc']);
+  const corrected = await w.ada.post('/payments/p_lc/corrections', { expected_revision: 1, amount: 4, effective_at: '2025-01-01t00:00:00z', reason: 'r' }, newKey());
+  assert.equal(corrected.status, 201, JSON.stringify(corrected.body));
+});
+
+test('R10: stored and query instants share one millisecond rule (both truncated)', async () => {
+  const w = await world(srv.base, fixture({ payments: [
+    { id: 'p_ms', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 5, note: '', created_at: '2025-01-01T00:00:00.000Z' },
+  ] }));
+  const corrected = await w.ada.post('/payments/p_ms/corrections', { expected_revision: 1, amount: 6, effective_at: '2025-01-01T00:00:00.0005Z', reason: 'r' }, newKey());
+  assert.equal(corrected.body.effective_at, '2025-01-01T00:00:00.000+00:00');
+  const window = (from, to) => w.ada.get(`/statement${q({ from, to })}`);
+  // The same instant written with sub-millisecond digits names the same millisecond everywhere.
+  assert.deepEqual((await window('2025-01-01T00:00:00.0005Z', '2025-01-01T00:00:00.0009Z')).body.entries.map((e) => e.payment.payment_id), []);
+  assert.deepEqual((await window('2025-01-01T00:00:00.0005Z', '2025-01-01T00:00:00.001Z')).body.entries.map((e) => e.payment.payment_id), ['p_ms']);
+  // ada opens at 10005 (seeded 10000 after sending 5); the corrected 6 counts at that millisecond.
+  assert.equal((await w.ada.get(`/me${q({ as_of: '2025-01-01T00:00:00.0004Z' })}`)).body.balance, 9_999);
+});

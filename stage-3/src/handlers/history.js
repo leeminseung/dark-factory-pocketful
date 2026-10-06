@@ -16,7 +16,7 @@ export function me({ state, user, query, now }) {
   const knownAt = queryInstant(query, 'known_at');
   const body = meView(state, user);
   if (!asOf && !knownAt) return { status: 200, body };
-  const money = moneyAt(state, user.id, asOf ? asOf.floor : now, knownAt ? knownAt.floor : undefined);
+  const money = moneyAt(state, user.id, asOf ? asOf.ms : now, knownAt ? knownAt.ms : undefined);
   return {
     status: 200,
     body: {
@@ -81,8 +81,8 @@ export function statement({ state, user, query, now }) {
   const knownAt = queryInstant(query, 'known_at');
   // [from, to): a payment at from counts, one at to does not. The default `to` is now, taken to
   // cover the read's own millisecond, so a payment already made in it is on the statement.
-  const fromMs = from ? from.ceil : null;
-  const toMs = to ? to.ceil : now + 1;
+  const fromMs = from ? from.ms : null;
+  const toMs = to ? to.ms : now + 1;
   if (fromMs !== null && fromMs > toMs) throw invalid('from must not be after to');
   // What this read can know is bounded by the read itself: nothing recorded later can count,
   // because the service records everything after it at a later instant (State.freezeReadAt).
@@ -90,7 +90,7 @@ export function statement({ state, user, query, now }) {
     userId: user.id,
     from: fromMs,
     to: toMs,
-    knownAt: Math.min(knownAt ? knownAt.floor : now, now),
+    knownAt: Math.min(knownAt ? knownAt.ms : now, now),
     knownAtText: knownAt ? knownAt.text : null,
   };
   const newToken = `snap_${randomBytes(18).toString('base64url')}`;
