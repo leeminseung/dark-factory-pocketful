@@ -69,6 +69,15 @@ All earlier rows still apply. The stage-1..3 suites run against every stage-4 bu
 | S4-036 | "A stage-4 service must accept exports produced by the same team's stages 1–3, retaining settlement membership, corrections and snapshots." | import | test_import4.py::test_earlier_exports_import | tested |
 | S4-037 | §10 continues to apply to the new state: export/import keeps refunds (`refund_of`), batches (`correction_batch_id`, shared `recorded_at`) and their receipts and replays; edited exports breaking them are 422 | import | test_import4.py::test_edited_batch_recorded_at_split<br>test_import4.py::test_edited_receipts_new_routes<br>test_import4.py::test_edited_refund_above_payment<br>test_import4.py::test_edited_refund_of_unknown<br>test_import4.py::test_refunds_and_batches_survive_import | tested |
 
+## Rows added after review (coordinator, stage 4)
+
+| ID | Quote | Area | Tests | Status |
+|---|---|---|---|---|
+| S4-038 | "Refunds cumulatively may not exceed the payment's current corrected amount" with stage 2 "Concurrent requests must produce the same results as executing them one at a time" — parallel refunds under different keys never exceed together (the rest 422 `refund_exceeds_payment`), also when racing a lowering correction | concurrency | | open |
+| S4-039 | "each revision also exposes correction_batch_id" — `GET /payments/{id}/revisions` shows it on batch revisions, null on revision 1 and on single-correction revisions; it survives export/import | batches | | open |
+| S4-040 | S4-014 inside a batch: an item lowering a payment below its refunded amount is 422 `refund_exceeds_payment`, ranked as an item error in input order, before completeness and funds | batches | | open |
+| S4-041 | A refund is a payment with its own `created_at`: revision 1 in its revisions, counted in `as_of` and statements for both parties; correcting the target later never changes the refund's amount | refunds | | open |
+
 ## Decisions (test-designer, stage 4)
 
 Decisions from stages 1–3 still apply.
