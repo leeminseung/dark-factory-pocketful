@@ -130,6 +130,16 @@ stage-3 build. Their tests hold because they make no corrections and send no tem
 | S3-068 | §10 continues to apply to the new state: export/import keeps revisions (amounts, `effective_at`, `recorded_at`, reasons), correction receipts and replays, payment `created_at`, `closed_at`. Edited exports that break these (receipt fields, revision order and times, ranges) are 422 | import | test_snapshots_holds_import.py::test_corrections_survive_import<br>test_snapshots_holds_import.py::test_edited_correction_receipt_fields<br>test_snapshots_holds_import.py::test_edited_revision_times_refused<br>test_snapshots_holds_import.py::test_edited_revisions_refused<br>test_snapshots_holds_import.py::test_import_with_future_payment_time_refused | tested |
 | S3-069 | §7 on the eighth path: a missing key is 400 `missing_idempotency_key`; keys are per user; a claimed key is resolved before field validation and current-resource checks; a failed correction claims no key | corrections | test_corrections.py::test_correction_needs_a_key<br>test_corrections.py::test_correction_replay<br>test_corrections.py::test_failed_correction_claims_no_key | tested |
 
+## Rows added after review (coordinator, stage 3)
+
+| ID | Quote | Area | Tests | Status |
+|---|---|---|---|---|
+| S3-070 | Stage 2: "Every `409 insufficient_funds` ... is now evaluated against `available`"; stage 3: "Current unaffordable debits still take precedence" — a correction debit within `total` but above `available` (an open hold) is 409 `insufficient_funds` | corrections | | open |
+| S3-071 | "Invalid input is 422 `validation_failed`" with §5 — wrong JSON types in a correction body (decision D3-8); a body that does not parse is 400 `malformed_request` | corrections | | open |
+| S3-072 | D3 with S3-005: a seeded payment or authorisation `created_at` that is not an RFC 3339 instant with an offset, or (authorisations, by analogy) in the future, is 422 from reset with no change; the same on import | fixture | | open |
+| S3-073 | §5 "No such resource": `GET /payments/{id}/revisions` on an unknown payment is 404 `not_found` | revisions | | open |
+| S3-074 | "Both query instants may be in the future" with the stage-2 fixed-bound ruling (max clock 9899-12-30T23:59:59.999Z): `as_of`, `known_at`, `from`, `to` and `effective_at` far in the future or past never give a 5xx, a non-RFC 3339 timestamp or a changed echo; an instant beyond the representable range is 422 or handled | instants | | open |
+
 ## Decisions (test-designer, stage 3)
 
 Stage-1 (D1–D12) and stage-2 (D2-1..D2-9) decisions still apply.
@@ -149,6 +159,11 @@ Stage-1 (D1–D12) and stage-2 (D2-1..D2-9) decisions still apply.
   (`insufficient_funds` before `historical_overdraft`).
 - **D3-6 Correction of request payments.** A payment made by paying a request is an ordinary
   payment, not a linked one. Its sender may correct it.
+- **D3-8 Wrong types in a correction body.** The section's "Invalid input is 422" and §5's
+  "a field of the wrong JSON type" → 400 both describe a number, null or boolean in
+  `expected_revision`, `effective_at` or `reason`, so either 400 `malformed_request` or 422
+  `validation_failed` is accepted there. `amount` follows §5's endpoint rule (strings and
+  booleans are 422). A body that does not parse is 400 `malformed_request`.
 - **D3-7 S1-R17 stands.** No stage-3 rule needs balances or totals above 2^53. Historical views
   are bounded by the same totals.
 
