@@ -58,3 +58,17 @@ Terms the requirements define or rely on, in the requirements' own words. "§" r
 | uncertain outcome | A payment whose response was lost; shown as `pay-uncertain`, "not confirmed rejections", retryable with the same key and body. | stage 2 Competing clients |
 | latest refresh wins | "a delayed earlier read must not overwrite a later refresh". | stage 2 Competing clients |
 | upgrade | Importing the same team's stage-1 export into the stage-2 service, with signed-in browsers and pending retries surviving. | stage 2 Existing clients |
+| effective time | `effective_at`: "when money took effect". Revision 1's is the payment's `created_at`; a correction names its own. | stage 3 Effective time |
+| recorded time | `recorded_at`: when the service "learned that fact"; server-assigned; "Recorded times for one payment strictly increase." | stage 3 Effective time |
+| revision | One immutable version of a payment's amount and effective time. Revision 1 is the original payment; each correction appends the next. | stage 3 Effective time |
+| correction | `POST /payments/{id}/corrections` by the original sender: a new revision with `expected_revision`, `amount` (0..1000000000; 0 reverses), `effective_at`, `reason`. The difference moves "between the **same two wallets**". | stage 3 Effective time |
+| stale revision | An `expected_revision` that is not the latest: 409 `stale_revision`. | stage 3 Effective time |
+| historical overdraft | A correction that would make "any user's corrected balance ... negative at any effective-time boundary": 409 `historical_overdraft`. | stage 3 Effective time |
+| `as_of` | Query instant: the balance "as it stood at that instant"; inclusive. | stage 3 GET /me |
+| `known_at` | Query instant: per payment, "its latest revision recorded **at or before** `known_at`". | stage 3 known_at |
+| opening balance | "what the wallet held before anything moved"; on a statement, "the balance immediately before `from`". | stage 3 GET /me, GET /statement |
+| statement | `GET /statement`: the caller's payments in "the half-open window `[from, to)`", oldest first, each with `delta` and `balance_after`, between `opening_balance` and `closing_balance`. | stage 3 GET /statement |
+| delta | A statement entry's signed effect on the caller: negative when sent, positive when received. | stage 3 GET /statement |
+| snapshot token | An opaque token from a first statement read that "freezes the caller's selected revisions, window, balances, entries and default `to`"; pages with `?snapshot=`; lasts until reset. | stage 3 Stable statement pagination |
+| linked payment | A settlement member or a capture; it cannot be corrected (422 `linked_payment_immutable`). | stage 3 Settlement history |
+| `closed_at` | An authorisation's closing event time: "null while open; event time when closed". | stage 3 Historical holds |
