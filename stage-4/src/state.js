@@ -236,33 +236,44 @@ export class State {
   // ---- corrections (stage 3) --------------------------------------------
 
   /**
-   * Appends a revision to `payment` and moves the difference from its current amount between
-   * the same two wallets in the same step: an increase debits the sender, a decrease the
-   * receiver. Refused with insufficient_funds when the debited wallet cannot afford it now, and
-   * otherwise with historical_overdraft when, under the latest revisions, either party's total or
-   * available would be negative at any past boundary. The caller runs this in a transaction, so a
-   * refusal leaves balances, revisions and everything else as they were.
+   * The one gate for corrections (stage 3): appends one revision to each payment, all recorded at
+   * one instant, strictly after every payment's previous revision, and moves each difference
+   * between that payment's two wallets in the same step: an increase debits the sender, a
+   * decrease the receiver. Refused, judged on the combined effect of every revision:
+   * 1. insufficient_funds when any debited wallet cannot afford it now (from available);
+   * 2. otherwise historical_overdraft when, under the latest revisions, any party's total or
+   *    available would be negative at some past boundary (one pass per party).
+   * The caller has already checked each item and runs this in a transaction, so a refusal leaves
+   * balances, revisions and everything else as they were.
    */
-  correctPayment(payment, { amount, effectiveAt, effectiveFrac, reason }) {
-    const previous = currentRevision(payment);
-    const delta = amount - previous.amount;
+  correctPayments(items) {
+    const net = new Map();
+    for (const { payment, amount } of items) {
+      const delta = amount - currentRevision(payment).amount;
+      net.set(payment.fromUserId, (net.get(payment.fromUserId) ?? 0) - delta);
+      net.set(payment.toUserId, (net.get(payment.toUserId) ?? 0) + delta);
+    }
     // Checked before anything changes, so the refusal precedes the clock and revision updates.
-    this.shiftBalances(new Map([[payment.fromUserId, -delta], [payment.toUserId, delta]]));
+    this.shiftBalances(net);
     // Recorded times for one payment strictly increase, and the service clock follows.
-    const recordedAt = Math.max(this.nextTimestamp(), previous.recordedAt + 1);
+    const recordedAt = Math.max(this.nextTimestamp(), ...items.map(({ payment }) => currentRevision(payment).recordedAt + 1));
     const clockBefore = this.lastTimestampMs;
     this.remember(() => { this.lastTimestampMs = clockBefore; });
     this.lastTimestampMs = recordedAt;
-    const revision = {
-      revision: previous.revision + 1, amount, effectiveAt, effectiveFrac, recordedAt, recordedFrac: '', reason, seq: this.nextRecordSeq(),
-    };
-    const revisionsBefore = payment.revisions;
-    this.remember(() => { payment.revisions = revisionsBefore; });
-    payment.revisions = [...payment.revisions, revision];
-    for (const userId of [payment.fromUserId, payment.toUserId]) {
+    const revisions = items.map(({ payment, amount, effectiveAt, effectiveFrac, reason }) => {
+      const revision = {
+        revision: currentRevision(payment).revision + 1, amount, effectiveAt, effectiveFrac, recordedAt, recordedFrac: '',
+        reason, seq: this.nextRecordSeq(),
+      };
+      const revisionsBefore = payment.revisions;
+      this.remember(() => { payment.revisions = revisionsBefore; });
+      payment.revisions = [...payment.revisions, revision];
+      return revision;
+    });
+    for (const userId of net.keys()) {
       if (firstOverdraft(this, userId) !== null) throw historicalOverdraft();
     }
-    return revision;
+    return revisions;
   }
 
   // ---- holds and authorizations ----------------------------------------

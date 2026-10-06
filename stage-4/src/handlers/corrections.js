@@ -30,7 +30,7 @@ export function createCorrection({ state, user, body, params, now }) {
   if (payment.fromUserId !== user.id) throw forbidden('only the payment\'s sender may correct it');
   if (isLinkedPayment(payment)) throw linkedPaymentImmutable();
   if (terms.expected !== currentRevision(payment).revision) throw staleRevision();
-  const revision = state.correctPayment(payment, terms);
+  const [revision] = state.correctPayments([{ payment, ...terms }]);
   return revisionView(payment, revision);
 }
 
