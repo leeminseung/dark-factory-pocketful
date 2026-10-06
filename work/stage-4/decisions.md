@@ -31,11 +31,19 @@
 - Round 2: product 236d7f8, suite 16f6bb0 (1143/1143; supplied --stage 4 isolated 3x pass; R1 probes hold;
   work/reviews/acceptance-236d7f8.md). D13 fixed, no new findings (work/reviews/design-236d7f8.md). Failing ids 0, no
   new non-blocking -> final review on 236d7f8.
+- Final review of 236d7f8: CHANGES NEEDED, blocking 1 (R8: import accepts a receipt moved into another user's scope;
+  owner's retry re-executes; present in stage-1..3 folders too); work/reviews/review-236d7f8-final.md (fix-commit +
+  probe briefs/raw listed; supplied --all isolated pass; --stage 4 isolated 4/4). R1-R4, D13 fixed. Sent R8 (all stage
+  folders) + R9-R12; rounds continue from 3 without reviewer, compared with 1.
 
 ## Rulings
 - R6 (non-string payment_id in a batch -> 422): no change; D4-6 (accepted) allows 400 or 422 for wrong-type fields.
 - R5, R7 (duplicate-id and same-instant checks' position): no change required; the stated precedence orders item errors,
   completeness, funds and history only, and does not place batch-shape or member-instant validation.
+- R11 (imported clock ahead of real time stamps new records in the future): no change. Stage-2 ruling 2abb370 keeps clock
+  bounds fixed, never relative to now; no sentence makes an imported future clock invalid. Non-blocking, recorded.
+- R12 (300-character snapshot token imports): non-blocking; §3.4 bounds "IDs" at 64 characters; implementer may apply
+  the same bound to tokens.
 
 ## Acceptance
 
