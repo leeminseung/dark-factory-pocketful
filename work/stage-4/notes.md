@@ -61,3 +61,11 @@ The stage-1 to stage-3 notes still apply to everything stage 4 did not change.
   rule is checked after completeness, as above.
 - R6: no change (D4-6). A wrong JSON type in a refund or batch item may be 400 or 422; amount is
   422 by §5's endpoint rule.
+- R8 residual: a settlement or batch record does not say which operator made it, and stage-1 to
+  stage-3 exports could not say so either. So a receipt moved from one operator's scope to another
+  operator's still imports. A receipt moved to a non-operator, or copied so that two receipts name
+  one record, is 422 (stage-1/ to stage-4/).
+- R11: no change, as ruled. An imported clock ahead of real time is valid under the fixed-bound
+  ruling.
+- R12: fixed in stage-4/ only. stage-3/ is left as accepted, because no stated rule bounds a token's
+  length.
