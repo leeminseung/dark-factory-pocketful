@@ -52,9 +52,11 @@ subscription, so nothing was billed per token.
   different real design system and surface, and a blind pass chooses. It rejects the palettes
   models fall back on and screens that read as one flat tone.
 - **Mistakes become cases.** A defect that passed the acceptance tests but was caught later by
-  review is written down as a case to try. Within a run the coordinator keeps
-  `work/case-memory.md`. Across runs a human promotes cases that need no product's terms into
-  the edge-cases skill.
+  review is written down as a case to try, at two levels. The **case memory** belongs to one
+  run: at each acceptance the coordinator adds the stage's cases to `work/case-memory.md`, and
+  the next stage reads it first. The **case library** spans runs: after a run, a person promotes
+  the cases that can be stated without any product's terms into the edge-cases skill
+  (`references/case-memory.md`), so a run on any product starts with them.
 
 The engineering principles come from books human teams use: one gate per invariant (Evans,
 *Domain-Driven Design*), one module per decision and designing it twice (Ousterhout, *A
@@ -134,8 +136,8 @@ acceptance; the baseline factory's review stopped one defect in four stages. Exa
 
 Each of these became a case in the run's `work/case-memory.md`, which grew to 7, 13, 18 and 20
 cases after stages 1 to 4. The stage 4 probe came straight from a stage 2 case about edited
-receipts, tried on the routes stage 4 added. The 20 cases in the edge-cases skill's own case
-memory come from earlier runs in the same way.
+receipts, tried on the routes stage 4 added. This run started with 20 cases in the case library,
+promoted from earlier runs in the same way.
 
 ## Setup
 
