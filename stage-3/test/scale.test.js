@@ -1,7 +1,7 @@
 // Stage 3 at size (§2: 5 s per request, 10 s for reset, up to 50 in flight).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { call, fixture, newKey, user, useServer, world } from './helpers.js';
+import { REQUEST_LIMIT_MS, RESET_LIMIT_MS, call, fixture, newKey, user, useServer, world } from './helpers.js';
 
 const srv = useServer();
 
@@ -26,7 +26,7 @@ for (const people of [50, 2]) {
     const res = await call(srv.base, 'POST', '/_test/reset', { json: busyFixture(20_000, people) });
     const ms = Date.now() - started;
     assert.equal(res.status, 204, JSON.stringify(res.body));
-    assert.ok(ms < 3_000, `reset took ${ms} ms`);
+    assert.ok(ms < RESET_LIMIT_MS, `reset took ${ms} ms`);
   });
 }
 
@@ -45,7 +45,7 @@ test('R2: with 5000 payments, 20 concurrent corrections each answer well inside 
   }));
   assert.ok(out.every((r) => r.status === 201), JSON.stringify(out.map((r) => r.status)));
   const slowest = Math.max(...out.map((r) => r.ms));
-  assert.ok(slowest < 1_500, `slowest correction took ${slowest} ms (all 20: ${Date.now() - started} ms)`);
+  assert.ok(slowest < REQUEST_LIMIT_MS, `slowest correction took ${slowest} ms (all 20: ${Date.now() - started} ms)`);
 });
 
 test('R1: a statement snapshot is a few fields, not a copy of the statement', async () => {

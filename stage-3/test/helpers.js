@@ -4,6 +4,12 @@ import { after, before } from 'node:test';
 import { createServer } from '../src/server.js';
 
 export const PASSWORD = 'correct horse';
+/**
+ * Timing bounds for tests: 80 % of the stated limits (§2: 10 s for reset, 5 s per request). Test
+ * files run in parallel and share the CPU, so a bound tighter than the requirement is flaky.
+ */
+export const RESET_LIMIT_MS = 8_000;
+export const REQUEST_LIMIT_MS = 4_000;
 export const user = (handle, balance, extra = {}) => ({
   id: `u_${handle}`, email: `${handle}@example.com`, password: PASSWORD,
   display_name: handle[0].toUpperCase() + handle.slice(1), handle, balance, ...extra,

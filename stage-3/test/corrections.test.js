@@ -178,3 +178,35 @@ test('S3 correction: revisions and correction replays survive export and import;
     expectError(await call(srv.base, 'POST', '/_test/import', { json: envelope }), 422, 'validation_failed', label);
   }
 });
+
+test('R12: movements at one instant count together at an overdraft boundary', async () => {
+  const T = '2025-05-05T05:05:05+00:00';
+  const w = await world(srv.base, fixture({
+    users: [user('ada', 9_000), user('bob', 15), user('cy', 1_000)],
+    payments: [
+      { id: 'p_a', from_user_id: 'u_bob', to_user_id: 'u_cy', amount: 1_000, note: '', created_at: T },
+      { id: 'p_b', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 1_000, note: '', created_at: T },
+      { id: 'p_c', from_user_id: 'u_ada', to_user_id: 'u_bob', amount: 10, note: '', created_at: '2025-06-01T00:00:00+00:00' },
+    ],
+  }));
+  // bob opens at 5; at T he receives 1000 and sends 1000 together; later he receives 10 (so he can
+  // afford the corrections now, and only the past is at stake).
+  const fix = (client, id, rev, amount) => client.post(`/payments/${id}/corrections`, { expected_revision: rev, amount, effective_at: T, reason: 'r' }, newKey());
+  assert.equal((await fix(w.bob, 'p_a', 1, 1_005)).status, 201, 'combined 0 at T is fine');
+  expectError(await fix(w.bob, 'p_a', 2, 1_006), 409, 'historical_overdraft');
+});
+
+test('R12: a key used by a refused correction is still free; concurrent same-key corrections make one revision', async () => {
+  const w = await world(srv.base);
+  const p = await paid(w);
+  const key = newKey();
+  expectError(await correct(w.ada, p.payment_id, body(p, { expected_revision: 2 }), key), 409, 'stale_revision');
+  const ok = await correct(w.ada, p.payment_id, body(p), key);
+  assert.equal(ok.status, 201, 'the key was not claimed by the refusal');
+  const key2 = newKey();
+  const out = await Promise.all(Array.from({ length: 10 }, () => correct(w.ada, p.payment_id, body(p, { expected_revision: 2, amount: 50 }), key2)));
+  assert.equal(out.filter((r) => r.status === 201).length, 1);
+  assert.equal(out.filter((r) => r.status === 200).length, 9);
+  assert.ok(out.every((r) => r.body.revision === 3));
+  assert.equal((await w.ada.get(`/payments/${p.payment_id}/revisions`)).body.revisions.length, 3);
+});
