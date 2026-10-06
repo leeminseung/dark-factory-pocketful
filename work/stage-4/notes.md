@@ -5,19 +5,22 @@ The stage-1 to stage-3 notes still apply to everything stage 4 did not change.
 ## Design decisions
 
 - **One correction gate** (`State.correctPayments`). A single correction is a batch of one with
-  no batch id. The gate nets every difference per wallet and refuses with insufficient_funds when
-  any wallet's available would go negative (S4-015, S4-027). It then records every revision at
-  one instant, strictly after each payment's previous revision. Last, it checks each party's
-  history with one firstOverdraft pass per party (historical_overdraft), so a batch costs at most
-  64 passes over the payments.
-- **Checks before the gate stay in the handler, in the stated order** (S4-026):
-  1. The batch's shape: an array of 1..32 objects with distinct string payment_ids.
-  2. Each item in input order: its fields (422), the payment exists (404), not a capture or
-     refund (linked_payment_immutable), expected_revision is current (stale_revision), the new
-     amount covers what was refunded (refund_exceeds_payment). Field checks come before the
-     lookup, as for stage-3 single corrections.
-  3. Every touched settlement complete (incomplete_settlement).
-  4. One effective instant per settlement, compared on the exact instant key (validation_failed).
+  no batch id. In order, the gate:
+  1. checks each item's own rules (State.checkCorrection, R2): not immutable for this kind of
+     correction (linked_payment_immutable), expected_revision current (stale_revision), the new
+     amount at least what was refunded (refund_exceeds_payment);
+  2. for a batch, checks every touched settlement complete (incomplete_settlement) and at one
+     effective instant, compared on the exact instant key (validation_failed);
+  3. nets every difference per wallet and refuses with insufficient_funds when any wallet's
+     available would go negative (S4-015, S4-027);
+  4. records every revision at one instant, strictly after each payment's previous revision;
+  5. checks each party's history with one firstOverdraft pass per party (historical_overdraft),
+     so a batch costs at most 64 passes over the payments.
+- **The stated order** (S4-026). The handler checks the batch's shape first: an array of 1..32
+  objects with distinct string payment_ids. It then reads each item in input order: its fields
+  (422), the payment exists (404), then State.checkCorrection. Field checks come before the
+  lookup, as for stage-3 single corrections. The gate repeats checkCorrection (no caller can skip
+  it), then goes on to completeness, funds and history.
 
   Completeness is checked for every settlement before any instant check, because the instant
   rule is about "members of one settlement", which only makes sense once all members are there.
