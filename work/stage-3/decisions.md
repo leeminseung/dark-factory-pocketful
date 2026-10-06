@@ -36,6 +36,8 @@
   briefs/raw listed). R1-R3, R6-R9 fixed; R10 regressed as R14; R5 open non-blocking. Sent R13-R24 to implementer;
   rounds continue from 3 without reviewer, compared with 7.
 - Round 3 started: product 744bfd4 (stage folders = e03b834), suite cc78f4d; acceptance + probes of R13-R16, R23.
+- Round 3: product 744bfd4, suite cc78f4d (1050/1050); supplied --stage 3 --mode isolated 3x pass; probes R13-R16,
+  R23 hold (work/reviews/acceptance-744bfd4.md). Failing ids 0; no new non-blocking -> re-review of 744bfd4.
 
 ## Rulings
 - Seeded payment `created_at: "not-a-time"` (stage-1 test test_fixture_fields_outside_the_format_are_ignored fails on
