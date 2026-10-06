@@ -26,6 +26,8 @@
   Screen regression: D13 non-blocking (refund rows look like fresh payments; work/reviews/design-16fff73.md). Round-1
   review work/reviews/review-16fff73-round1.md (standards + spec briefs/raw present): R1 blocking, R2-R7 non-blocking;
   S3-RISK-1 confirmed closed. Count 0; reviewer blocking R1 -> round 2; all sent.
+- Round 2 started: product 236d7f8 (stage folders = 8e2cb2a), suite 16f6bb0; acceptance + R1 probes; screen check of
+  the D13 change.
 
 ## Rulings
 - R6 (non-string payment_id in a batch -> 422): no change; D4-6 (accepted) allows 400 or 422 for wrong-type fields.
