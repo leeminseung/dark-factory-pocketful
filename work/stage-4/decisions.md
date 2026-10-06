@@ -17,6 +17,7 @@
   on revisions (null otherwise; survives import); refund_exceeds_payment inside a batch; refunds in history.
 - Suite ready 3fa4459 (1133 tests, 83 new); command `work/acceptance/run.sh stage-4 4`; sent to implementer.
   S4-038..S4-041 not yet added (crossed); re-requested.
+- List complete at 41 rows (S4-038..S4-041 in 4723697); suite 16f6bb0.
 
 ## Rounds
 
