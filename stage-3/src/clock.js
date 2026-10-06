@@ -6,8 +6,10 @@ export const formatTimestamp = (ms) => new Date(ms).toISOString().replace('Z', '
 export const RFC3339 =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
+// One rule for every instant the service reads (stage 3 R6): RFC 3339 §5.6 with an offset; the
+// "T" and "Z" may be lowercase.
 const RFC3339_PARTS =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:(Z)|([+-])(\d{2}):(\d{2}))$/;
+  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
 
 /** Epoch ms of an RFC 3339 timestamp with an explicit offset, or null if it is not one (a real date and time). */
 export function parseTimestamp(text) {
