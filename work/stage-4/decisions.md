@@ -22,8 +22,15 @@
 ## Rounds
 - Round 1 started: product 16fff73 (stage folders = 7ca43e7), suite 16f6bb0; acceptance, reviewer round-1 review,
   product-designer non-blocking regression review.
+- Round 1: product 16fff73, suite 16f6bb0 (1143/1143; supplied --stage 4 isolated 3x pass; work/reviews/acceptance-16fff73.md).
+  Screen regression: D13 non-blocking (refund rows look like fresh payments; work/reviews/design-16fff73.md). Round-1
+  review work/reviews/review-16fff73-round1.md (standards + spec briefs/raw present): R1 blocking, R2-R7 non-blocking;
+  S3-RISK-1 confirmed closed. Count 0; reviewer blocking R1 -> round 2; all sent.
 
 ## Rulings
+- R6 (non-string payment_id in a batch -> 422): no change; D4-6 (accepted) allows 400 or 422 for wrong-type fields.
+- R5, R7 (duplicate-id and same-instant checks' position): no change required; the stated precedence orders item errors,
+  completeness, funds and history only, and does not place batch-shape or member-instant validation.
 
 ## Acceptance
 
