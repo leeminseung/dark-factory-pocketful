@@ -263,7 +263,8 @@ function checkHistory(r) {
 function checkSnapshots(r, isUser) {
   r.snapshots.forEach((sn, i) => {
     const at = `snapshots[${i}]`;
-    check(typeof sn.token === 'string' && sn.token !== '' && isUser(sn.userId), `${at} owner or token is invalid`);
+    // A snapshot token is bounded like an id (§3.4: 1 to 64 characters); the service makes 29.
+    check(isId(sn.token) && isUser(sn.userId), `${at} owner or token is invalid`);
     const window = [isFrac(sn.fromFrac) && isFrac(sn.toFrac) && isFrac(sn.knownAtFrac),
       sn.from === null ? sn.fromFrac === '' : isTimestampMs(sn.from), isTimestampMs(sn.to)];
     check(window.every(Boolean) && (sn.from === null || instantKey(sn.from, sn.fromFrac) <= instantKey(sn.to, sn.toFrac)),

@@ -146,6 +146,7 @@ test('R3 S3 "Tokens last until reset": snapshots survive export and import, stil
     'echo not an instant': edit({ known_at_text: 'tomorrow' }),
     'echo before the watermark': edit({ known_at_text: '2000-01-01T00:00:00Z' }),
     'empty token': edit({ token: '' }),
+    'token longer than an id (R12)': edit({ token: `snap_${'x'.repeat(60)}` }),
     'duplicate token': { ...exported, state: { ...s, snapshots: [...s.snapshots, s.snapshots[0]] } },
     'snapshots missing': { ...exported, state: (({ snapshots, ...rest }) => rest)(s) },
   };
