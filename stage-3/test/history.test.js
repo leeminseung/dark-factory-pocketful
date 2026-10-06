@@ -112,3 +112,17 @@ test('S3 fixture: seeded history must be nonnegative at every point, not only at
   ] });
   expectError(await call(srv.base, 'POST', '/_test/reset', { json: fx }), 422, 'validation_failed');
 });
+
+test('R1 R12: a snapshot pages the same result after a payment, a correction and a hold lifecycle', async () => {
+  const w = await world(srv.base, history());
+  const first = (await w.ada.get(`/statement${q({ limit: 10 })}`)).body;
+  const p = (await w.ada.post('/payments', { to_handle: 'bob', amount: 7 }, newKey())).body;
+  await w.ada.post('/payments/p_a/corrections', { expected_revision: 1, amount: 400, effective_at: '2025-01-01T10:00:00+00:00', reason: 'fix' }, newKey());
+  await w.ada.post(`/payments/${p.payment_id}/corrections`, { expected_revision: 1, amount: 5, effective_at: p.created_at, reason: 'fix' }, newKey());
+  const a = (await w.ada.post('/authorizations', { to_handle: 'bob', amount: 30 }, newKey())).body;
+  await w.bob.post(`/authorizations/${a.authorization_id}/capture`, { amount: 10 }, newKey());
+  const again = (await w.ada.get(`/statement${q({ snapshot: first.snapshot, limit: 10 })}`)).body;
+  assert.deepEqual(again, first);
+  const fresh = (await w.ada.get('/statement')).body;
+  assert.notDeepEqual(fresh.entries, first.entries, 'a new read sees the changes');
+});

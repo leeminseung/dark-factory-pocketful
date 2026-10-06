@@ -47,3 +47,12 @@ test('R2: with 5000 payments, 20 concurrent corrections each answer well inside 
   const slowest = Math.max(...out.map((r) => r.ms));
   assert.ok(slowest < 1_500, `slowest correction took ${slowest} ms (all 20: ${Date.now() - started} ms)`);
 });
+
+test('R1: a statement snapshot is a few fields, not a copy of the statement', async () => {
+  const { store } = await import('../src/state.js');
+  const w = await world(srv.base, busyFixture(5_000, 2));
+  for (let i = 0; i < 20; i += 1) assert.equal((await w.u0.get('/statement?limit=1')).status, 200);
+  const sizes = [...store.current.snapshots.values()].map((s) => JSON.stringify(s).length);
+  assert.equal(sizes.length, 20);
+  assert.ok(Math.max(...sizes) < 400, `largest snapshot record is ${Math.max(...sizes)} bytes`);
+});

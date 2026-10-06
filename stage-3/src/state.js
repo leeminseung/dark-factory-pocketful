@@ -18,7 +18,7 @@ import {
 } from './errors.js';
 import { currentRevision, firstOverdraft } from './ledger.js';
 import {
-  DEFAULT_AUTHORIZATION_TTL_SECONDS, TERMINAL_STATUSES, expiryOf, isDue, remainingOf,
+  DEFAULT_AUTHORIZATION_TTL_SECONDS, MAX_CLOCK_MS, TERMINAL_STATUSES, expiryOf, isDue, remainingOf,
 } from './model.js';
 
 export class State {
@@ -368,6 +368,17 @@ export class State {
   }
 
   // ---- statement snapshots (stage 3) ------------------------------------
+
+  /**
+   * After a read that froze what was known at `readAt`, everything the service records is stamped
+   * strictly later, so a snapshot's watermark never takes in a later revision. (At the clock's
+   * fixed bound, MAX_CLOCK_MS, the clock cannot move on; see notes.)
+   */
+  freezeReadAt(readAt) {
+    const before = this.lastTimestampMs;
+    this.remember(() => { this.lastTimestampMs = before; });
+    this.lastTimestampMs = Math.max(this.lastTimestampMs, Math.min(readAt + 1, MAX_CLOCK_MS));
+  }
 
   addSnapshot(token, snapshot) {
     this.snapshots.set(token, snapshot);

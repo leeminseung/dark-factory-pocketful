@@ -39,18 +39,23 @@ function entryView(state, entry) {
   };
 }
 
-/** The response for one page of a frozen statement. */
-function pageOf(snapshot, token, page) {
-  const { items, hasMore } = paginate(snapshot.entries, page);
+/**
+ * One page of a statement snapshot. The snapshot holds only its owner, window and knowledge
+ * watermark; the window is recomputed from the payments' revisions, which never change once
+ * recorded, so every page shows exactly what the first read showed.
+ */
+function pageOf(state, snapshot, token, page) {
+  const result = statementOf(state, snapshot.userId, { from: snapshot.from, to: snapshot.to, knownAt: snapshot.knownAt });
+  const { items, hasMore } = paginate(result.entries, page);
   return {
     status: 200,
     body: {
-      opening_balance: snapshot.opening,
-      entries: items,
-      closing_balance: snapshot.closing,
+      opening_balance: result.opening,
+      entries: items.map((entry) => entryView(state, entry)),
+      closing_balance: result.closing,
       has_more: hasMore,
       snapshot: token,
-      ...(snapshot.knownAt !== null && { known_at: snapshot.knownAt }),
+      ...(snapshot.knownAtText !== null && { known_at: snapshot.knownAtText }),
     },
   };
 }
@@ -69,7 +74,7 @@ export function statement({ state, user, query, now }) {
     }
     const snapshot = state.snapshots.get(token);
     if (!snapshot || snapshot.userId !== user.id) throw notFound('no such statement snapshot');
-    return pageOf(snapshot, token, page);
+    return pageOf(state, snapshot, token, page);
   }
   const from = queryInstant(query, 'from');
   const to = queryInstant(query, 'to');
@@ -79,15 +84,17 @@ export function statement({ state, user, query, now }) {
   const fromMs = from ? from.ceil : null;
   const toMs = to ? to.ceil : now + 1;
   if (fromMs !== null && fromMs > toMs) throw invalid('from must not be after to');
-  const result = statementOf(state, user.id, { from: fromMs, to: toMs, knownAt: knownAt ? knownAt.floor : undefined });
+  // What this read can know is bounded by the read itself: nothing recorded later can count,
+  // because the service records everything after it at a later instant (State.freezeReadAt).
   const snapshot = {
     userId: user.id,
-    opening: result.opening,
-    closing: result.closing,
-    entries: result.entries.map((entry) => entryView(state, entry)),
-    knownAt: knownAt ? knownAt.text : null,
+    from: fromMs,
+    to: toMs,
+    knownAt: Math.min(knownAt ? knownAt.floor : now, now),
+    knownAtText: knownAt ? knownAt.text : null,
   };
   const newToken = `snap_${randomBytes(18).toString('base64url')}`;
+  state.freezeReadAt(now);
   state.addSnapshot(newToken, snapshot);
-  return pageOf(snapshot, newToken, page);
+  return pageOf(state, snapshot, newToken, page);
 }
