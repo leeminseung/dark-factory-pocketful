@@ -596,9 +596,9 @@ const REPLAY_RULES = {
     return Boolean(sp) && sp.requesterId === userId && body.amount === sp.amount
       && sameReceipt(receipt, view.split(sp));
   },
-  '/settlements': ({ receipt, records, view }) => {
+  '/settlements': ({ userId, receipt, records, view }) => {
     const st = records.settlements.get(receipt.settlement_id);
-    return Boolean(st) && sameReceipt(receipt, view.settlement(st));
+    return records.operators.has(userId) && Boolean(st) && sameReceipt(receipt, view.settlement(st));
   },
   '/payments/:id/corrections': ({ userId, params, body, receipt, records }) => {
     const p = records.payments.get(params.id);
@@ -613,10 +613,10 @@ const REPLAY_RULES = {
     return Boolean(p) && p.refundOf === params.id && p.fromUserId === userId && body.amount === p.amount
       && sameReceipt(receipt, view.payment(p));
   },
-  '/correction-batches': ({ body, receipt, records }) => {
+  '/correction-batches': ({ userId, body, receipt, records }) => {
     const items = records.batches.get(receipt.correction_batch_id);
     const entries = body.corrections;
-    if (!items || !Array.isArray(entries) || entries.length !== items.length) return false;
+    if (!records.operators.has(userId) || !items || !Array.isArray(entries) || entries.length !== items.length) return false;
     // A batch records its revisions in the body's order, so recording order is input order.
     return items.every(({ payment, rev }, i) => isPlainObject(entries[i]) && entries[i].payment_id === payment.id
       && entries[i].expected_revision === rev.revision - 1 && entries[i].amount === rev.amount && entries[i].reason === rev.reason
@@ -628,6 +628,24 @@ const REPLAY_RULES = {
     return Boolean(a) && a.fromUserId === userId && body.amount === a.amount
       && sameReceipt(receipt, view.authorization(a));
   },
+};
+
+/**
+ * The record each kind of write made, as named by its receipt. Every write made its own record,
+ * so no two receipts may name the same one: a receipt copied into another scope is not a write
+ * that happened (stage-4 final review R8).
+ */
+const WRITTEN_RECORD = {
+  '/payments': (receipt) => `payment ${receipt.payment_id}`,
+  '/requests/:id/pay': (receipt) => `payment ${receipt.payment_id}`,
+  '/requests': (receipt) => `request ${receipt.request_id}`,
+  '/splits': (receipt) => `split ${receipt.split_id}`,
+  '/settlements': (receipt) => `settlement ${receipt.settlement_id}`,
+  '/authorizations/:id/capture': (receipt) => `payment ${receipt.payment_id}`,
+  '/authorizations': (receipt) => `authorization ${receipt.authorization_id}`,
+  '/payments/:id/corrections': (receipt) => `revision ${receipt.payment_id} ${receipt.revision}`,
+  '/payments/:id/refunds': (receipt) => `payment ${receipt.payment_id}`,
+  '/correction-batches': (receipt) => `batch ${receipt.correction_batch_id}`,
 };
 
 /** The receipts each kind of write returned when it happened, built with the API's own views. */
@@ -656,14 +674,17 @@ function checkReplays(r) {
   const index = (list) => new Map(list.map((x) => [x.id, x]));
   const records = {
     users: index(r.users), payments: index(r.payments), requests: index(r.requests),
-    splits: index(r.splits), settlements: index(r.settlements), authorizations: index(r.authorizations),
+    splits: index(r.splits), settlements: index(r.settlements), operators: new Set(r.operatorIds), authorizations: index(r.authorizations),
     batches: correctionBatches(r),
   };
   const view = creationViews(r, records);
+  const written = [];
   r.idempotency.forEach((rec, i) => {
     const [userId, , route, params] = JSON.parse(rec.scope);
     const rule = REPLAY_RULES[route];
     const ok = rule && rule({ userId, params, body: JSON.parse(rec.fingerprint), receipt: rec.response.body, records, view });
     check(ok, `idempotency[${i}] is not the receipt the service gave for that write`);
+    written.push(WRITTEN_RECORD[route](rec.response.body));
   });
+  requireUnique(written, 'record named by a receipt');
 }
