@@ -35,6 +35,8 @@
   owner's retry re-executes; present in stage-1..3 folders too); work/reviews/review-236d7f8-final.md (fix-commit +
   probe briefs/raw listed; supplied --all isolated pass; --stage 4 isolated 4/4). R1-R4, D13 fixed. Sent R8 (all stage
   folders) + R9-R12; rounds continue from 3 without reviewer, compared with 1.
+- Round 3 started: product eb6e37e (stage folders = 6ab31ff; stage-1..3 changed for R8), suite 16f6bb0 on all four
+  folders; R8 probes incl. the operator-to-operator move gap.
 
 ## Rulings
 - R6 (non-string payment_id in a batch -> 422): no change; D4-6 (accepted) allows 400 or 422 for wrong-type fields.
