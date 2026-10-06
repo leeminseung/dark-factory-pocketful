@@ -52,13 +52,13 @@ const terms = (payment, over = {}) => ({ payment, expected: 1, amount: 100, effe
 
 test('R2: the correction gate itself refuses immutable payments, stale revisions, the refund floor and partial settlements', () => {
   const cases = [
-    ['a capture', ({ p }) => [[terms(p.capture)], {}], 'linked_payment_immutable'],
-    ['a refund', ({ p }) => [[terms(p.refund)], { batchId: 'cb_1' }], 'linked_payment_immutable'],
-    ['a member alone', ({ p }) => [[terms(p.member)], {}], 'linked_payment_immutable'],
-    ['a stale revision', ({ p }) => [[terms(p.plain, { expected: 2 })], {}], 'stale_revision'],
-    ['below the refunds', ({ p }) => [[terms(p.refunded, { amount: 99 })], {}], 'refund_exceeds_payment'],
-    ['part of a settlement', ({ p }) => [[terms(p.member)], { batchId: 'cb_1' }], 'incomplete_settlement'],
-    ['a settlement at two instants', ({ p }) => [[terms(p.member), terms(p.member2, { effectiveAt: 999 })], { batchId: 'cb_1' }], 'validation_failed'],
+    ['a capture', ({ p }) => [[terms(p.capture)], { kind: 'single' }], 'linked_payment_immutable'],
+    ['a refund', ({ p }) => [[terms(p.refund)], { kind: 'batch' }], 'linked_payment_immutable'],
+    ['a member alone', ({ p }) => [[terms(p.member)], { kind: 'single' }], 'linked_payment_immutable'],
+    ['a stale revision', ({ p }) => [[terms(p.plain, { expected: 2 })], { kind: 'single' }], 'stale_revision'],
+    ['below the refunds', ({ p }) => [[terms(p.refunded, { amount: 99 })], { kind: 'single' }], 'refund_exceeds_payment'],
+    ['part of a settlement', ({ p }) => [[terms(p.member)], { kind: 'batch' }], 'incomplete_settlement'],
+    ['a settlement at two instants', ({ p }) => [[terms(p.member), terms(p.member2, { effectiveAt: 999 })], { kind: 'batch' }], 'validation_failed'],
   ];
   for (const [label, args, code] of cases) {
     const book = bookWithPayments();
@@ -67,6 +67,6 @@ test('R2: the correction gate itself refuses immutable payments, stale revisions
     assert.ok(book.state.payments.every((x) => x.revisions.length === 1), `${label}: nothing recorded`);
   }
   const book = bookWithPayments();
-  const revisions = book.state.correctPayments([terms(book.p.member, { amount: 90 }), terms(book.p.member2, { amount: 90 })], { batchId: 'cb_1' });
-  assert.deepEqual(revisions.map((r) => [r.revision, r.amount, r.correctionBatchId]), [[2, 90, 'cb_1'], [2, 90, 'cb_1']]);
+  const { batchId, revisions } = book.state.correctPayments([terms(book.p.member, { amount: 90 }), terms(book.p.member2, { amount: 90 })], { kind: 'batch' });
+  assert.deepEqual(revisions.map((r) => [r.revision, r.amount, r.correctionBatchId]), [[2, 90, batchId], [2, 90, batchId]]);
 });

@@ -24,13 +24,17 @@ function correctionTerms(body, now) {
 
 /** Idempotent: only the original sender corrects; returns the 201 body, the new revision. */
 export function createCorrection({ state, user, body, params, now }) {
-  const terms = correctionTerms(body, now);
-  const payment = state.paymentsById.get(params.id);
-  if (!payment) throw notFound('no such payment');
-  if (payment.fromUserId !== user.id) throw forbidden('only the payment\'s sender may correct it');
-  // Settlement members, captures and refunds are out of reach of a single correction.
-  state.checkCorrection(payment, terms, { inBatch: false });
-  const [revision] = state.correctPayments([{ payment, ...terms }]);
+  // Settlement members, captures and refunds are out of reach of a single correction (the gate).
+  const { items: [{ payment }], revisions: [revision] } = state.correctPayments([body], {
+    kind: 'single',
+    readItem: (entry) => {
+      const terms = correctionTerms(entry, now);
+      const target = state.paymentsById.get(params.id);
+      if (!target) throw notFound('no such payment');
+      if (target.fromUserId !== user.id) throw forbidden('only the payment\'s sender may correct it');
+      return { payment: target, ...terms };
+    },
+  });
   return revisionView(payment, revision);
 }
 
@@ -46,25 +50,24 @@ function batchEntries(body) {
   return entries;
 }
 
-/** One batch item, with the ordinary correction rules; captures and refunds stay immutable. */
+/** One batch item's fields and payment; the gate then applies the correction rules to it. */
 function batchItem(state, entry, now) {
   if (typeof entry.payment_id !== 'string') throw invalid('payment_id must be a string');
   const terms = correctionTerms(entry, now);
   const payment = state.paymentsById.get(entry.payment_id);
   if (!payment) throw notFound(`no such payment ${entry.payment_id}`);
-  state.checkCorrection(payment, terms, { inBatch: true });
   return { payment, ...terms };
 }
 
 /**
  * POST /correction-batches (stage 4), idempotent; the caller is already known to be an operator.
- * Errors in the stated order: the batch's shape, then each item in input order, then (in
- * State.correctPayments) settlement completeness, current available funds, then history.
+ * Errors in the stated order: the batch's shape, then (in State.correctPayments) each item in input
+ * order, settlement completeness, current available funds, then history.
  */
 export function createCorrectionBatch({ state, body, now }) {
-  const items = batchEntries(body).map((entry) => batchItem(state, entry, now));
-  const batchId = state.newId('cb', (id) => state.correctionBatchIds.has(id));
-  const revisions = state.correctPayments(items, { batchId });
+  const { batchId, items, revisions } = state.correctPayments(batchEntries(body), {
+    kind: 'batch', readItem: (entry) => batchItem(state, entry, now),
+  });
   return correctionBatchView(batchId, items.map(({ payment }, i) => ({ payment, rev: revisions[i] })));
 }
 

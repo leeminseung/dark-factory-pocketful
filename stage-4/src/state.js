@@ -244,19 +244,29 @@ export class State {
    * The one gate for corrections (stage 3, 4): appends one revision to each payment, all
    * recorded at one instant, strictly after every payment's previous revision, and moves each
    * difference between that payment's two wallets in the same step: an increase debits the
-   * sender, a decrease the receiver. A single correction is a batch of one, with no batch id. Refused, judged on the combined effect of every revision:
-   * 1. each item's own rules (checkCorrection), in input order;
+   * sender, a decrease the receiver.
+   *
+   * `kind` is 'single' (a sender correcting one payment) or 'batch' (an operator's correction
+   * batch, which gets a new batch id). `readItem` turns each entry into { payment, expected,
+   * amount, effectiveAt, effectiveFrac, reason } with the caller's field and lookup checks. Refused,
+   * in this order:
+   * 1. each entry, in input order: the caller's checks, then its own rules (checkCorrection);
    * 2. for a batch, every touched settlement whole at one instant (checkSettlementsWhole);
-   * 3. insufficient_funds when any debited wallet cannot afford it now (from available);
+   * 3. insufficient_funds when any debited wallet cannot afford the combined effect now;
    * 4. otherwise historical_overdraft when, under the latest revisions, any party's total or
    *    available would be negative at some past boundary (one pass per party).
-   * Handlers call checkCorrection themselves while reading items, so that item errors keep input
-   * order among their own field checks; the gate checks again so that no caller can skip them.
-   * The caller runs this in a transaction, so a refusal leaves everything as it was.
+   * The caller runs this in a transaction, so a refusal leaves everything as it was. Returns
+   * { batchId (null for a single correction), items, revisions }, revisions in input order.
    */
-  correctPayments(items, { batchId = null } = {}) {
-    for (const item of items) this.checkCorrection(item.payment, item, { inBatch: batchId !== null });
-    if (batchId !== null) this.checkSettlementsWhole(items);
+  correctPayments(entries, { kind, readItem = (entry) => entry }) {
+    if (kind !== 'single' && kind !== 'batch') throw new Error(`unknown correction kind ${kind}`);
+    const inBatch = kind === 'batch';
+    const items = entries.map((entry) => {
+      const item = readItem(entry);
+      this.checkCorrection(item.payment, item, { inBatch });
+      return item;
+    });
+    if (inBatch) this.checkSettlementsWhole(items);
     const net = new Map();
     for (const { payment, amount } of items) {
       const delta = amount - currentRevision(payment).amount;
@@ -270,6 +280,7 @@ export class State {
     const clockBefore = this.lastTimestampMs;
     this.remember(() => { this.lastTimestampMs = clockBefore; });
     this.lastTimestampMs = recordedAt;
+    const batchId = inBatch ? this.newId('cb', (id) => this.correctionBatchIds.has(id)) : null;
     const revisions = items.map(({ payment, amount, effectiveAt, effectiveFrac, reason }) => {
       const revision = {
         revision: currentRevision(payment).revision + 1, amount, effectiveAt, effectiveFrac, recordedAt, recordedFrac: '',
@@ -284,7 +295,7 @@ export class State {
     for (const userId of net.keys()) {
       if (firstOverdraft(this, userId) !== null) throw historicalOverdraft();
     }
-    return revisions;
+    return { batchId, items, revisions };
   }
 
   /**
