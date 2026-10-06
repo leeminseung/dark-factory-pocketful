@@ -1,0 +1,6 @@
+#!/bin/sh
+# Seat runtime: Claude Code with its own config folder and a per-seat git identity.
+export CLAUDE_CONFIG_DIR="$HOME/.claude-seat"
+export GIT_AUTHOR_NAME="test-designer" GIT_AUTHOR_EMAIL="test-designer@leeward.invalid"
+export GIT_COMMITTER_NAME="test-designer" GIT_COMMITTER_EMAIL="test-designer@leeward.invalid"
+exec claude "$@"

@@ -1,0 +1,35 @@
+{
+  "disableClaudeAiConnectors": true,
+  "autoMemoryEnabled": false,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 $HOME/dark-factory/seat-config/hooks/guard-git.py"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 $HOME/dark-factory/seat-config/hooks/guard-scope.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 $HOME/dark-factory/seat-config/hooks/guard-paths.py"
+          }
+        ]
+      }
+    ]
+  }
+}

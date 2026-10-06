@@ -1,0 +1,32 @@
+{
+  "_about": "Path ownership for guard-paths.py. Seat name (GIT_AUTHOR_NAME) -> glob patterns relative to the result repository root; '*' stays inside one folder, '**' crosses folders. Paths no seat owns (mandates/, FACTORY.md, README.md) stay as the operator committed them. read_only folders (the challenge package, the shared skills) are never written.",
+  "read_only": [
+    "~/dark-factory/dark-factory-wearedevs",
+    "~/.claude-seat/skills"
+  ],
+  "owners": {
+    "coordinator": [
+      "work/stage-*/decisions.md",
+      "work/case-memory.md"
+    ],
+    "implementer": [
+      "stage-*/**",
+      "work/stage-*/notes.md",
+      "work/reviews/implementer-*"
+    ],
+    "test-designer": [
+      "work/stage-*/requirements.md",
+      "work/glossary.md",
+      "work/acceptance/**",
+      "work/reviews/acceptance-*"
+    ],
+    "reviewer": [
+      "work/reviews/review-*"
+    ],
+    "product-designer": [
+      "work/design.md",
+      "work/reviews/design-*",
+      "work/reviews/screens/**"
+    ]
+  }
+}

@@ -1,0 +1,3 @@
+# Folders on this machine the seats must never read, one per line.
+# Copy to private-paths.txt beside guard-scope.py and edit; the file stays out of git.
+~/notes
