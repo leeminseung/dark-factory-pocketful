@@ -41,6 +41,8 @@
   2x pass; R8 probes: non-operator moves, cross-user copies and duplicate-key copies are 422 everywhere
   (work/reviews/acceptance-eb6e37e.md). Operator-to-operator and same-user key moves import (ruled not a failure).
   Failing ids 0 vs 1 -> re-review of eb6e37e.
+- Re-review of eb6e37e: PASS, blocking 0 (work/reviews/review-eb6e37e-recheck.md, dad63f0). R8 fixed in all four
+  folders; supplied --all --mode isolated: each folder claims its own stage; --stage 4 isolated 4/4.
 
 ## Rulings
 - Receipt moved between two operators, or to another key of the same user (round 3): not a failure. §10 refuses "an
@@ -57,7 +59,31 @@
   the same bound to tokens.
 
 ## Acceptance
+- Accepted revision: eb6e37e3f5450d169b03ddabc7a0ef3ce11f7b37 (stage folders = 6ab31ff), status: passed.
+- Reviewer report: work/reviews/review-eb6e37e-recheck.md; acceptance work/reviews/acceptance-eb6e37e.md; screens
+  work/reviews/design-236d7f8.md.
+- Requirement rows covered: stage 4 41/41; stage 3 72/72; stage 2 164/164; stage 1 190/190.
+- stage-1/, stage-2/, stage-3/ changed after their acceptance for R8 only (2ed059b, ab50bce, 16945ed); each passes its
+  acceptance suite and claims its own stage.
 
 ## Open failures, risks, unfixed non-blocking findings
+- Open failures: none.
+- S4-RISK-1 (ruled not a failure; next: implementer if a later stage records initiators): a receipt moved between two
+  operators, or to another key of the same user, imports; the original retry then re-executes (settlements) or loses its
+  replay (batches).
+- S1-RISK-1 (carried). S3-RISK-1 closed.
+- S4-R11 (no change): an imported clock ahead of real time stamps new records in the future.
+- Carried non-blocking: S3-R17, S3-R22, S3-R24, S3-R5, S2-R23, S1-R17; history items.
 
 ## Retro
+- Rejected/failed: (1) import checked the refund cap only against the final revision, so an edited history with a
+  correction below the refunded amount imported (R1); (2) import never tied operator-route receipts to an operator, so a
+  receipt moved to another user made a settlement run twice — present since stage 1 (R8).
+- Caught by: R1 round-1 review (standards pass); R8 final-review probe.
+- Slipped late: R8 passed every suite and the stage-2 receipt-edit standing tests, which edited fields but never the
+  scope; D13 (refund rows indistinguishable) was caught only by the screen regression review.
+- Rounds: 3 plus round-1 review, final review and re-review. Round 1 -> 2 on R1; final review rejected on R8; round 3
+  (1 -> 0); re-review passed.
+- Watch (test-designer): receipt-edit standing tests must also move scope (user, key) on every route.
+- Watch (implementer): any import rule must be evaluated in recording order, the same predicate as the live path.
+- Watch (product-designer): each new payment kind needs its own feed wording.

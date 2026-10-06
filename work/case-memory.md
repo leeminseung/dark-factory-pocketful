@@ -45,3 +45,9 @@ Defects that passed the acceptance suite and were caught later by a review. Read
   20000-record reset/import: all within the time limits. (Stage 3, S3-R2, round-1 review.)
 - Export and import, then use a token/handle issued before the export (pagination snapshots, not just bearer tokens):
   it must still work. (Stage 3, S3-R3, round-1 review.)
+- In an export, reorder history (move a correction after a refund, adjusting sequence numbers and clocks): import must
+  apply the live rule in recording order and refuse a history the live path would have refused. (Stage 4, S4-R1,
+  round-1 review.)
+- In an export, move a stored idempotency receipt into another user's scope (a non-operator for operator routes) or
+  copy it under a second key: import must refuse it; otherwise the owner's retry runs the write again. (Stage 4,
+  S4-R8, final review; present since stage 1.)
