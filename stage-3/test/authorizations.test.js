@@ -1,8 +1,7 @@
 // Stage 2: holds, authorizations, captures, voids and expiry.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RFC3339 } from '../src/clock.js';
-import { asStage1Export, call, fixture, newKey, useServer, world } from './helpers.js';
+import { asStage1Export, call, fixture, newKey, RESPONSE_TIMESTAMP, useServer, world } from './helpers.js';
 
 const srv = useServer();
 const expectError = (res, status, code, label) =>
@@ -24,7 +23,7 @@ test('a hold reserves money without moving it; /me shows total, available and he
   assert.equal(a.status, 'open');
   assert.deepEqual([a.amount, a.captured_amount, a.remaining_amount, a.payment_id, a.payment_ids], [2000, 0, 2000, null, []]);
   assert.deepEqual([a.from_handle, a.to_handle, a.note, a.visibility, a.currency], ['ada', 'bob', 'deposit', 'private', 'EUR']);
-  assert.match(a.expires_at, RFC3339);
+  assert.match(a.expires_at, RESPONSE_TIMESTAMP);
   assert.equal(Date.parse(a.expires_at) - Date.parse(a.created_at), 600_000, 'default lifetime 600 s');
   const m = await me(w.ada);
   assert.deepEqual([m.balance, m.total, m.available, m.held], [10_000, 10_000, 8_000, 2_000]);
@@ -300,7 +299,7 @@ test('R10 R11 S2-102 S1-154 (ruling 2abb370): fixed bounds on the lifetime and t
   const w = await world(srv.base, fixture({ authorization_ttl_seconds: MAX_TTL }));
   const a = await authorize(w, 'ada', 'bob', 10);
   assert.equal(Date.parse(a.expires_at) - Date.parse(a.created_at), MAX_TTL * 1000, 'expires_at is created_at plus the ttl');
-  assert.match(a.expires_at, RFC3339);
+  assert.match(a.expires_at, RESPONSE_TIMESTAMP);
   const snapshot = (await call(srv.base, 'GET', '/_test/export')).body;
   await sleep(1_100);
   assert.equal((await importState(snapshot)).status, 204, 'an export taken at the bound still imports later');

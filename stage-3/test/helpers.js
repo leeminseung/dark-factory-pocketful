@@ -20,6 +20,8 @@ export const fixture = (over = {}) => ({
   payments: [], requests: [], ...over,
 });
 export const newKey = () => randomUUID();
+/** How every response writes an instant (§3.4): RFC 3339 in UTC with "+00:00", milliseconds or finer. */
+export const RESPONSE_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3,}\+00:00$/;
 
 /** Starts one server for the calling test file and returns its base URL getter. */
 export function useServer() {

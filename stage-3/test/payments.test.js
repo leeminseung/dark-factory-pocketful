@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RFC3339 } from '../src/clock.js';
-import { call, fixture, newKey, useServer, world } from './helpers.js';
+import { call, fixture, newKey, RESPONSE_TIMESTAMP, useServer, world } from './helpers.js';
 
 const srv = useServer();
 const expectError = (res, status, code, label) =>
@@ -29,7 +28,7 @@ test('a payment moves money atomically and returns the full receipt', async () =
   assert.equal(p.visibility, 'public');
   assert.equal(p.request_id, null);
   assert.equal(p.settlement_id, null);
-  assert.match(p.created_at, RFC3339);
+  assert.match(p.created_at, RESPONSE_TIMESTAMP);
   assert.ok(p.payment_id.length <= 64);
   assert.equal(await w.ada.balance(), 8_500);
   assert.equal(await w.bob.balance(), 4_000);

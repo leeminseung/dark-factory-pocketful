@@ -8,9 +8,6 @@
 /** Formats an instant, e.g. 2026-09-24T11:04:03.120+00:00, or …03.1205+00:00 with frac '5'. */
 export const formatTimestamp = (ms, frac = '') => new Date(ms).toISOString().replace('Z', `${frac}+00:00`);
 
-export const RFC3339 =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
-
 // One rule for every instant the service reads (stage 3 R6): RFC 3339 §5.6 with an offset; the
 // "T" and "Z" may be lowercase.
 const RFC3339_PARTS =
