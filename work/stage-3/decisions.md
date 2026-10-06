@@ -23,6 +23,9 @@
 ## Rounds
 - Round 1 started: product 6a17d63 (stage-3 = e6ee3d8); suite after test-designer's fix of the created_at stage-1 test;
   acceptance check, reviewer round-1 review, product-designer non-blocking regression review.
+- Round 1: product 6a17d63, suite cc78f4d (1050/1050; work/reviews/acceptance-6a17d63.md). Screen regression review:
+  no findings (work/reviews/design-6a17d63.md). Round-1 review work/reviews/review-6a17d63-round1.md (standards + spec
+  briefs/raw present): R1, R2, R3 blocking; R4-R12 non-blocking. Count 0; reviewer blocking -> round 2; all sent.
 
 ## Rulings
 - Seeded payment `created_at: "not-a-time"` (stage-1 test test_fixture_fields_outside_the_format_are_ignored fails on
@@ -30,6 +33,13 @@
   with the additions below" and "Seeded payments may supply `created_at`" — the field is now part of the fixture format,
   so S1-025's "unknown fields ... ignored" no longer covers it; §5 "A field of the correct JSON type with an invalid
   format ... gives 422"; S3-072 already requires 422. The stage-1 test must use a field no stage defines (test-designer).
+- R3 (snapshot tokens lost on export/import): BLOCKING. Stage 3: "Tokens last until reset."; §10: "Existing receipts,
+  tokens and retries must remain valid after import". Import is not reset, and the unqualified "tokens" covers snapshot
+  tokens; snapshots are service state and must be exported and imported (owner/user binding kept).
+- R4 (from later than to -> 422): no change. No sentence defines such a window, and statement rule 3 ("opening_balance
+  plus all delta values ... must equal closing_balance") cannot hold for an inverted window, so it is "a stated rule ...
+  violated" (§5) -> 422.
+- R6 (lowercase t/z): non-blocking; implementer's choice, but one rule for every instant the service parses.
 
 ## Acceptance
 
