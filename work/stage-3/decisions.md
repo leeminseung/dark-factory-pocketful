@@ -13,6 +13,9 @@
   (`--all --mode isolated`) -> accept.
 - Handoff sent to implementer, test-designer and product-designer in 4 numbered parts (full stage-3 spec; carry-forward
   S1-RISK-1, S2-R23, S2-R19, S1-R17 and watch items in part 3).
+- List check (52fafae, 67 rows): asked for 5 more — correction insufficient_funds against available; correction field
+  wrong types (decision); seeded payment/authorization created_at format and future (reset and import); revisions on
+  unknown payment 404; extreme query instants never 5xx / non-RFC 3339.
 
 ## Rounds
 
