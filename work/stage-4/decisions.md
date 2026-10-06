@@ -15,6 +15,8 @@
   in part 2).
 - List check (4044345, 37 rows): asked for S4-038..S4-041 — concurrent refunds within the limit; correction_batch_id
   on revisions (null otherwise; survives import); refund_exceeds_payment inside a batch; refunds in history.
+- Suite ready 3fa4459 (1133 tests, 83 new); command `work/acceptance/run.sh stage-4 4`; sent to implementer.
+  S4-038..S4-041 not yet added (crossed); re-requested.
 
 ## Rounds
 
