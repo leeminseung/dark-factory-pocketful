@@ -275,6 +275,11 @@ Rows on paper, 1 px hairline between rows, no cards.
   the time, then privacy: lock icon + "Private" (ink) or people icon + "Public" (graphite).
 - `activity-note-{id}`: exactly the note, 16/400 ink, **no quotation marks**. Present but empty
   (zero height) when the note is empty.
+- Refunds (stage 4, `refund_of` set): the row keeps every required element unchanged
+  (`activity-parties` still "{from} paid {to}", the amount, the note). Its meta line starts with
+  "Refund" instead of "Sent" / "Received" ("Refund sent", "Refund received", or "Refund" between
+  others), with a 12 px return-arrow glyph on the plate instead of the direction arrow, so a refund
+  never reads as a fresh payment with the same note.
 - Loading (first load, or a refresh with no rows yet): "Loading activity…" (13 graphite) above
   three ash placeholder rows of row height; no layout shift when rows arrive.
 - `empty-activity`: title "No payments yet." body "Send money to someone by their handle, and it
