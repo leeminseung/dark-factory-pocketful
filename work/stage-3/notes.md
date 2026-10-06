@@ -83,3 +83,16 @@ The stage-1 and stage-2 notes still apply to everything stage 3 did not change.
   that same millisecond was left out of a statement read just after it. It is covered by
   corrections.test.js 'a correction that makes a past balance negative', whose before/after
   statements depend on it.
+- R17: snapshots stay stored records (a few hundred bytes each, until reset), not self-contained
+  signed tokens. Signed tokens would touch the statement handler, State, export, import and the
+  validator, not one module. They would also need a signing key that survives export and import
+  (§10 "tokens … remain valid after import"), so the key would travel in every export.
+- R18: 31ecf4e (R6) went in without its test, which came in d408eb0. History stays as it happened.
+  Since then every fix in this stage starts from a failing test in the same commit.
+- R22: a leap second (`…T23:59:60Z`) is refused with 422. The service orders instants on POSIX
+  epoch time, which has no 61st second, so such an instant has no place in that order that keeps
+  every comparison exact (R14). Placing it on the next second would make 23:59:60.5 equal to
+  00:00:00.5.
+- R24: GET /requests and GET /authorizations stay offset-paged, as in stage 2. No requirement
+  states paging stability for them, and the screens remove repeated rows by id (S2-R12). Only the
+  statement has a stability rule, and it has snapshots.
